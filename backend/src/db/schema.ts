@@ -1,4 +1,4 @@
-import { index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -20,6 +20,8 @@ export const assets = pgTable(
     /** Display color as #RRGGBB uppercase. */
     color: text('color').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    /** Liquidated position: excluded from home dashboard; logs kept on the asset page. */
+    withdrawn: boolean('withdrawn').notNull().default(false),
   },
   (t) => ({
     userIdx: index('assets_user_id_idx').on(t.userId),

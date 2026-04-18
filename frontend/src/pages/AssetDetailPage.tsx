@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   computeAssetLogStats,
@@ -22,7 +22,7 @@ import { defaultChartGainLossColors, monthlyPerformanceHistogramAsc } from '../a
 import { useTheme } from '../theme/ThemeProvider'
 import type { AssetRow } from './AssetsPage'
 
-type AssetSummary = { id: string; name: string; color: string; createdAt: string }
+type AssetSummary = { id: string; name: string; color: string; createdAt: string; withdrawn: boolean }
 
 type AssetLogRow = {
   id: string
@@ -115,6 +115,10 @@ export function AssetDetailPage() {
   const [editAssetError, setEditAssetError] = useState<string | null>(null)
   const [editAssetSaving, setEditAssetSaving] = useState(false)
   const [deleteAssetModalOpen, setDeleteAssetModalOpen] = useState(false)
+  const [assetMenuOpen, setAssetMenuOpen] = useState(false)
+  const [withdrawnSaving, setWithdrawnSaving] = useState(false)
+  const [assetPatchError, setAssetPatchError] = useState<string | null>(null)
+  const menuWrapRef = useRef<HTMLDivElement>(null)
 
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
@@ -160,6 +164,28 @@ export function AssetDetailPage() {
   }, [load])
 
   useEffect(() => {
+    if (isEditingAsset) setAssetMenuOpen(false)
+  }, [isEditingAsset])
+
+  useEffect(() => {
+    if (!assetMenuOpen) return
+    function onPointerDown(e: PointerEvent) {
+      const root = menuWrapRef.current
+      if (!root || !(e.target instanceof Node) || root.contains(e.target)) return
+      setAssetMenuOpen(false)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setAssetMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [assetMenuOpen])
+
+  useEffect(() => {
     let cancelled = false
     void apiJson<{ user: { displayCurrency: string | null } }>('/api/auth/me')
       .then((data) => {
@@ -193,6 +219,8 @@ export function AssetDetailPage() {
 
   function startEditAsset() {
     if (!asset) return
+    setAssetMenuOpen(false)
+    setAssetPatchError(null)
     setIsEditingAsset(true)
     setEditAssetName(asset.name)
     setEditAssetColor(normalizePresetColor(asset.color))
@@ -219,6 +247,7 @@ export function AssetDetailPage() {
         name: res.asset.name,
         color: res.asset.color,
         createdAt: res.asset.createdAt,
+        withdrawn: res.asset.withdrawn,
       })
       cancelEditAsset()
     } catch (err: unknown) {
@@ -230,6 +259,35 @@ export function AssetDetailPage() {
       else setEditAssetError('Something went wrong')
     } finally {
       setEditAssetSaving(false)
+    }
+  }
+
+  async function patchWithdrawn(next: boolean) {
+    if (!assetId) return
+    setAssetPatchError(null)
+    setWithdrawnSaving(true)
+    try {
+      const res = await apiJson<{ asset: AssetRow }>(`/api/assets/${assetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ withdrawn: next }),
+      })
+      setAsset({
+        id: res.asset.id,
+        name: res.asset.name,
+        color: res.asset.color,
+        createdAt: res.asset.createdAt,
+        withdrawn: res.asset.withdrawn,
+      })
+      setAssetMenuOpen(false)
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) {
+        void navigate('/login', { replace: true })
+        return
+      }
+      if (err instanceof ApiError) setAssetPatchError(err.message)
+      else setAssetPatchError('Something went wrong')
+    } finally {
+      setWithdrawnSaving(false)
     }
   }
 
@@ -394,9 +452,16 @@ export function AssetDetailPage() {
 
   const deleteLogModalOpen = deleteTarget != null
   const logsBusy =
-    deleteLogModalOpen || editSaving || saving || editAssetSaving || isEditingAsset || editingLogId != null
+    deleteLogModalOpen ||
+    editSaving ||
+    saving ||
+    editAssetSaving ||
+    isEditingAsset ||
+    editingLogId != null ||
+    withdrawnSaving
   const newLogLocked = editingLogId != null || editSaving || isEditingAsset || editAssetSaving
-  const blockLogRowActions = deleteLogModalOpen || editSaving || saving || deleteAssetModalOpen || editAssetSaving
+  const blockLogRowActions =
+    deleteLogModalOpen || editSaving || saving || deleteAssetModalOpen || editAssetSaving || withdrawnSaving
 
   return (
     <main className="app asset-detail-page">
@@ -430,25 +495,83 @@ export function AssetDetailPage() {
             </div>
           </form>
         ) : (
-          <>
+          <div className="asset-detail-header-row">
             <div className="asset-detail-title-block">
               <span className="asset-swatch asset-swatch--large" style={{ backgroundColor: asset.color }} title={asset.name} />
               <div>
                 <h1 className="asset-detail-name">{asset.name}</h1>
                 <p className="asset-detail-date">Added {formatAssetDate(asset.createdAt)}</p>
+                {asset.withdrawn ? (
+                  <p className="asset-detail-subline">
+                    <span className="asset-withdrawn-pill">Withdrawn</span>
+                    <span className="muted"> Excluded from your home dashboard.</span>
+                  </p>
+                ) : null}
               </div>
             </div>
-            <div className="asset-detail-header-actions">
-              <button type="button" className="btn" onClick={startEditAsset} disabled={logsBusy}>
-                Edit asset
+            <div className="asset-detail-menu-wrap" ref={menuWrapRef}>
+              <button
+                type="button"
+                className="asset-detail-menu-trigger"
+                aria-label="Asset actions"
+                aria-haspopup="menu"
+                aria-expanded={assetMenuOpen}
+                disabled={logsBusy}
+                onClick={() => {
+                  setAssetPatchError(null)
+                  setAssetMenuOpen((open) => !open)
+                }}
+              >
+                <span className="asset-detail-menu-dots" aria-hidden>
+                  &#8942;
+                </span>
               </button>
-              <button type="button" className="btn btn-danger" onClick={() => setDeleteAssetModalOpen(true)} disabled={logsBusy}>
-                Delete asset
-              </button>
+              {assetMenuOpen ? (
+                <ul className="asset-detail-menu" role="menu">
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="asset-detail-menu-item"
+                      disabled={logsBusy}
+                      onClick={() => startEditAsset()}
+                    >
+                      Edit
+                    </button>
+                  </li>
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="asset-detail-menu-item"
+                      disabled={logsBusy || withdrawnSaving}
+                      onClick={() => void patchWithdrawn(!asset.withdrawn)}
+                    >
+                      {withdrawnSaving ? 'Updating…' : asset.withdrawn ? 'Unmark as withdrawn' : 'Mark as withdrawn'}
+                    </button>
+                  </li>
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="asset-detail-menu-item asset-detail-menu-item--danger"
+                      disabled={logsBusy}
+                      onClick={() => {
+                        setAssetMenuOpen(false)
+                        setDeleteAssetModalOpen(true)
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                </ul>
+              ) : null}
             </div>
-          </>
+          </div>
         )}
       </header>
+
+      {assetPatchError != null ? <p className="error asset-detail-patch-error">{assetPatchError}</p> : null}
 
       <section className="asset-detail-stats" aria-label="Portfolio summary">
         <div className="asset-detail-stat">

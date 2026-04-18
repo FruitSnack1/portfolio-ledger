@@ -4,7 +4,7 @@ import { ASSET_COLOR_PRESETS, DEFAULT_ASSET_COLOR } from '../asset/assetColorPal
 import { ApiError, apiJson } from '../api/client'
 import { AssetColorPresets } from '../components/AssetColorPresets'
 
-export type AssetRow = { id: string; name: string; color: string; createdAt: string }
+export type AssetRow = { id: string; name: string; color: string; createdAt: string; withdrawn: boolean }
 
 function formatAssetDate(iso: string) {
   const d = new Date(iso)
@@ -33,7 +33,13 @@ export function AssetsPage() {
     setLoadState('loading')
     try {
       const data = await apiJson<{ assets: AssetRow[] }>('/api/assets')
-      setAssets(data.assets)
+      const sorted = [...data.assets].sort((a, b) => {
+        const aw = a.withdrawn ? 1 : 0
+        const bw = b.withdrawn ? 1 : 0
+        if (aw !== bw) return aw - bw
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      })
+      setAssets(sorted)
       setLoadState('ok')
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 401) {
@@ -123,11 +129,18 @@ export function AssetsPage() {
             <ul className="asset-list">
               {assets.map((a) => (
                 <li key={a.id}>
-                  <Link to={`/assets/${a.id}`} className="asset-card asset-card--link">
+                  <Link
+                    to={`/assets/${a.id}`}
+                    className={`asset-card asset-card--link${a.withdrawn ? ' asset-card--withdrawn' : ''}`}
+                  >
                     <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
                     <div className="asset-meta">
                       <span className="asset-name">{a.name}</span>
-                      <span className="muted asset-date">{formatAssetDate(a.createdAt)}</span>
+                      {a.withdrawn ? (
+                        <span className="asset-withdrawn-pill">Withdrawn</span>
+                      ) : (
+                        <span className="muted asset-date">{formatAssetDate(a.createdAt)}</span>
+                      )}
                     </div>
                     <span className="asset-card-chevron" aria-hidden>
                       →

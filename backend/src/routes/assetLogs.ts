@@ -28,6 +28,7 @@ const assetSummaryColumns = {
   name: assets.name,
   color: assets.color,
   createdAt: assets.createdAt,
+  withdrawn: assets.withdrawn,
 }
 
 const logReturnColumns = {

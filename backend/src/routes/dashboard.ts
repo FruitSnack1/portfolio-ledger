@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { requireUserId } from '../auth/requireUserId.js'
 import { buildDashboard } from '../portfolio/buildDashboard.js'
 import type { Db } from '../db/client.js'
@@ -25,7 +25,7 @@ export async function registerDashboardRoutes(app: FastifyInstance, db: Db) {
           color: assets.color,
         })
         .from(assets)
-        .where(eq(assets.userId, userId))
+        .where(and(eq(assets.userId, userId), eq(assets.withdrawn, false)))
 
       if (assetRows.length === 0) {
         return {

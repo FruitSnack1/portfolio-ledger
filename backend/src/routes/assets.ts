@@ -19,9 +19,11 @@ const patchAssetBodySchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     color: assetColorSchema.optional(),
+    withdrawn: z.boolean().optional(),
   })
-  .refine((d) => d.name !== undefined || d.color !== undefined, {
-    message: 'At least one of name or color is required',
+  .superRefine((d, ctx) => {
+    if (d.name === undefined && d.color === undefined && d.withdrawn === undefined)
+      ctx.addIssue({ code: 'custom', message: 'At least one field is required' })
   })
 
 const assetReturnColumns = {
@@ -29,6 +31,7 @@ const assetReturnColumns = {
   name: assets.name,
   color: assets.color,
   createdAt: assets.createdAt,
+  withdrawn: assets.withdrawn,
 }
 
 function isMissingAssetsTable(error: unknown): boolean {
@@ -113,9 +116,10 @@ export async function registerAssetRoutes(app: FastifyInstance, db: Db) {
 
       if (!existing) return reply.status(404).send({ error: 'Asset not found' })
 
-      const updates: { name?: string; color?: string } = {}
+      const updates: { name?: string; color?: string; withdrawn?: boolean } = {}
       if (patch.name !== undefined) updates.name = patch.name
       if (patch.color !== undefined) updates.color = patch.color
+      if (patch.withdrawn !== undefined) updates.withdrawn = patch.withdrawn
 
       const [row] = await db
         .update(assets)
