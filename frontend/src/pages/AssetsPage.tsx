@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ASSET_COLOR_PRESETS, DEFAULT_ASSET_COLOR } from '../asset/assetColorPalette'
 import { ApiError, apiJson } from '../api/client'
 import { AssetColorPresets } from '../components/AssetColorPresets'
-import { ConfirmModal } from '../components/ConfirmModal'
 
 export type AssetRow = { id: string; name: string; color: string; createdAt: string }
 
@@ -19,12 +18,6 @@ function assetColorLabel(hex: string) {
   return hex
 }
 
-function normalizePresetColor(hex: string) {
-  const u = hex.toUpperCase()
-  if (ASSET_COLOR_PRESETS.some((p) => p.hex === u)) return u
-  return DEFAULT_ASSET_COLOR
-}
-
 export function AssetsPage() {
   const navigate = useNavigate()
   const [assets, setAssets] = useState<AssetRow[]>([])
@@ -34,13 +27,6 @@ export function AssetsPage() {
   const [color, setColor] = useState(DEFAULT_ASSET_COLOR)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editColor, setEditColor] = useState(DEFAULT_ASSET_COLOR)
-  const [editError, setEditError] = useState<string | null>(null)
-  const [editSaving, setEditSaving] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<AssetRow | null>(null)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -64,18 +50,6 @@ export function AssetsPage() {
   useEffect(() => {
     void load()
   }, [load])
-
-  function startEdit(a: AssetRow) {
-    setEditingId(a.id)
-    setEditName(a.name)
-    setEditColor(normalizePresetColor(a.color))
-    setEditError(null)
-  }
-
-  function cancelEdit() {
-    setEditingId(null)
-    setEditError(null)
-  }
 
   async function onCreate(e: FormEvent) {
     e.preventDefault()
@@ -101,51 +75,6 @@ export function AssetsPage() {
     }
   }
 
-  async function onSaveEdit(e: FormEvent) {
-    e.preventDefault()
-    if (!editingId) return
-    setEditError(null)
-    setEditSaving(true)
-    try {
-      const res = await apiJson<{ asset: AssetRow }>(`/api/assets/${editingId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ name: editName.trim(), color: editColor }),
-      })
-      setAssets((prev) => prev.map((x) => (x.id === res.asset.id ? res.asset : x)))
-      cancelEdit()
-    } catch (err: unknown) {
-      if (err instanceof ApiError && err.status === 401) {
-        void navigate('/login', { replace: true })
-        return
-      }
-      if (err instanceof ApiError) setEditError(err.message)
-      else setEditError('Something went wrong')
-    } finally {
-      setEditSaving(false)
-    }
-  }
-
-  async function performDelete() {
-    const target = deleteTarget
-    if (!target) return
-    try {
-      await apiJson<{ ok: boolean }>(`/api/assets/${target.id}`, { method: 'DELETE' })
-      setAssets((prev) => prev.filter((x) => x.id !== target.id))
-      if (editingId === target.id) cancelEdit()
-    } catch (err: unknown) {
-      if (err instanceof ApiError && err.status === 401) {
-        setDeleteTarget(null)
-        void navigate('/login', { replace: true })
-        return
-      }
-      if (err instanceof ApiError) throw err
-      throw new Error('Could not delete asset')
-    }
-  }
-
-  const deleteModalOpen = deleteTarget != null
-  const blockListActions = deleteModalOpen || editSaving
-
   if (loadState === 'loading') return <main className="app">Loading assets…</main>
 
   if (loadState === 'error')
@@ -164,7 +93,7 @@ export function AssetsPage() {
         <Link to="/">← Home</Link>
       </p>
       <h1>Assets</h1>
-      <p className="muted">Only you can see assets on this account.</p>
+      <p className="muted">Only you can see assets on this account. Click an asset to open its page.</p>
 
       <div className="assets-layout">
         <section className="card asset-form-card">
@@ -193,78 +122,23 @@ export function AssetsPage() {
           ) : (
             <ul className="asset-list">
               {assets.map((a) => (
-                <li key={a.id} className={`asset-card${editingId === a.id ? ' asset-card--editing' : ''}`}>
-                  {editingId === a.id ? (
-                    <form className="asset-card-edit" onSubmit={(ev) => void onSaveEdit(ev)}>
-                      <label className="field">
-                        <span>Name</span>
-                        <input value={editName} onChange={(ev) => setEditName(ev.target.value)} required maxLength={120} />
-                      </label>
-                      <div className="field">
-                        <span>Color</span>
-                        <AssetColorPresets value={editColor} onChange={setEditColor} groupLabel={`Color for ${editName || 'asset'}`} />
-                      </div>
-                      {editError != null && <p className="error">{editError}</p>}
-                      <div className="asset-card-edit-actions">
-                        <button type="button" className="btn" onClick={cancelEdit} disabled={editSaving}>
-                          Cancel
-                        </button>
-                        <button type="submit" className="btn primary" disabled={editSaving}>
-                          {editSaving ? 'Saving…' : 'Save'}
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <>
-                      <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
-                      <div className="asset-meta">
-                        <span className="asset-name">{a.name}</span>
-                        <span className="muted asset-date">{formatAssetDate(a.createdAt)}</span>
-                      </div>
-                      <div className="asset-actions">
-                        <Link className="btn" to={`/assets/${a.id}/logs`}>
-                          Logs
-                        </Link>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => startEdit(a)}
-                          disabled={blockListActions || (editingId != null && editingId !== a.id)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger"
-                          onClick={() => setDeleteTarget(a)}
-                          disabled={blockListActions}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
+                <li key={a.id}>
+                  <Link to={`/assets/${a.id}`} className="asset-card asset-card--link">
+                    <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
+                    <div className="asset-meta">
+                      <span className="asset-name">{a.name}</span>
+                      <span className="muted asset-date">{formatAssetDate(a.createdAt)}</span>
+                    </div>
+                    <span className="asset-card-chevron" aria-hidden>
+                      →
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>
           )}
         </section>
       </div>
-
-      <ConfirmModal
-        open={deleteModalOpen}
-        title="Delete asset?"
-        description={
-          deleteTarget != null
-            ? `Permanently remove “${deleteTarget.name}”? This cannot be undone.`
-            : ''
-        }
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        danger
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={performDelete}
-      />
     </main>
   )
 }

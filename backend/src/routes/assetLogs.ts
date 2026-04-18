@@ -27,6 +27,7 @@ const assetSummaryColumns = {
   id: assets.id,
   name: assets.name,
   color: assets.color,
+  createdAt: assets.createdAt,
 }
 
 const logReturnColumns = {

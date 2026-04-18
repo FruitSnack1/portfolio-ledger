@@ -1,11 +1,14 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ASSET_COLOR_PRESETS, DEFAULT_ASSET_COLOR } from '../asset/assetColorPalette'
 import { ApiError, apiJson } from '../api/client'
+import { AssetColorPresets } from '../components/AssetColorPresets'
 import { ConfirmModal } from '../components/ConfirmModal'
+import type { AssetRow } from './AssetsPage'
 
-type AssetSummary = { id: string; name: string; color: string }
+type AssetSummary = { id: string; name: string; color: string; createdAt: string }
 
-export type AssetLogRow = {
+type AssetLogRow = {
   id: string
   year: number
   month: number
@@ -29,13 +32,24 @@ const MONTH_OPTIONS = [
   { value: 12, label: 'December' },
 ] as const
 
+function formatAssetDate(iso: string) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
+}
+
 function formatNumericForInput(raw: string) {
   const n = Number(raw)
   if (!Number.isFinite(n)) return raw
   return String(n)
 }
 
-/** API returns logs ordered by (year, month) descending; first row is latest. */
+function normalizePresetColor(hex: string) {
+  const u = hex.toUpperCase()
+  if (ASSET_COLOR_PRESETS.some((p) => p.hex === u)) return u
+  return DEFAULT_ASSET_COLOR
+}
+
 function depositBalanceFromLatestLog(logs: AssetLogRow[]) {
   if (logs.length === 0) return { deposit: '', balance: '' }
   const latest = logs[0]
@@ -70,13 +84,20 @@ function buildYearOptions(maxYear: number) {
   return Array.from({ length: end - 1999 + 1 }, (_, i) => 2000 + i)
 }
 
-export function AssetLogsPage() {
+export function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>()
   const navigate = useNavigate()
   const [asset, setAsset] = useState<AssetSummary | null>(null)
   const [logs, setLogs] = useState<AssetLogRow[]>([])
   const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const [isEditingAsset, setIsEditingAsset] = useState(false)
+  const [editAssetName, setEditAssetName] = useState('')
+  const [editAssetColor, setEditAssetColor] = useState(DEFAULT_ASSET_COLOR)
+  const [editAssetError, setEditAssetError] = useState<string | null>(null)
+  const [editAssetSaving, setEditAssetSaving] = useState(false)
+  const [deleteAssetModalOpen, setDeleteAssetModalOpen] = useState(false)
 
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
@@ -102,13 +123,7 @@ export function AssetLogsPage() {
       const data = await apiJson<{ asset: AssetSummary; logs: AssetLogRow[] }>(`/api/assets/${assetId}/logs`)
       setAsset(data.asset)
       setLogs(data.logs)
-      applyCurrentPeriodAndLatestDefaults(
-        data.logs,
-        setYear,
-        setMonth,
-        setDeposit,
-        setBalance,
-      )
+      applyCurrentPeriodAndLatestDefaults(data.logs, setYear, setMonth, setDeposit, setBalance)
       setLoadState('ok')
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 401) {
@@ -126,7 +141,66 @@ export function AssetLogsPage() {
     void load()
   }, [load])
 
-  function startEdit(row: AssetLogRow) {
+  function startEditAsset() {
+    if (!asset) return
+    setIsEditingAsset(true)
+    setEditAssetName(asset.name)
+    setEditAssetColor(normalizePresetColor(asset.color))
+    setEditAssetError(null)
+  }
+
+  function cancelEditAsset() {
+    setIsEditingAsset(false)
+    setEditAssetError(null)
+  }
+
+  async function onSaveAsset(e: FormEvent) {
+    e.preventDefault()
+    if (!assetId) return
+    setEditAssetError(null)
+    setEditAssetSaving(true)
+    try {
+      const res = await apiJson<{ asset: AssetRow }>(`/api/assets/${assetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: editAssetName.trim(), color: editAssetColor }),
+      })
+      setAsset({
+        id: res.asset.id,
+        name: res.asset.name,
+        color: res.asset.color,
+        createdAt: res.asset.createdAt,
+      })
+      cancelEditAsset()
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) {
+        void navigate('/login', { replace: true })
+        return
+      }
+      if (err instanceof ApiError) setEditAssetError(err.message)
+      else setEditAssetError('Something went wrong')
+    } finally {
+      setEditAssetSaving(false)
+    }
+  }
+
+  async function performDeleteAsset() {
+    if (!assetId) return
+    try {
+      await apiJson<{ ok: boolean }>(`/api/assets/${assetId}`, { method: 'DELETE' })
+      setDeleteAssetModalOpen(false)
+      void navigate('/assets', { replace: true })
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) {
+        setDeleteAssetModalOpen(false)
+        void navigate('/login', { replace: true })
+        return
+      }
+      if (err instanceof ApiError) throw err
+      throw new Error('Could not delete asset')
+    }
+  }
+
+  function startEditLog(row: AssetLogRow) {
     setEditingLogId(row.id)
     setEditYear(row.year)
     setEditMonth(row.month)
@@ -135,12 +209,12 @@ export function AssetLogsPage() {
     setEditError(null)
   }
 
-  function cancelEdit() {
+  function cancelEditLog() {
     setEditingLogId(null)
     setEditError(null)
   }
 
-  async function onSaveEdit(e: FormEvent) {
+  async function onSaveLogEdit(e: FormEvent) {
     e.preventDefault()
     if (!assetId || !editingLogId) return
     setEditError(null)
@@ -165,7 +239,7 @@ export function AssetLogsPage() {
           balance: balanceNum,
         }),
       })
-      cancelEdit()
+      cancelEditLog()
       await load()
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
@@ -179,13 +253,13 @@ export function AssetLogsPage() {
     }
   }
 
-  async function performDelete() {
+  async function performDeleteLog() {
     const target = deleteTarget
     if (!target || !assetId) return
     try {
       await apiJson<{ ok: boolean }>(`/api/assets/${assetId}/logs/${target.id}`, { method: 'DELETE' })
       setDeleteTarget(null)
-      if (editingLogId === target.id) cancelEdit()
+      if (editingLogId === target.id) cancelEditLog()
       await load()
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
@@ -198,7 +272,7 @@ export function AssetLogsPage() {
     }
   }
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmitNewLog(e: FormEvent) {
     e.preventDefault()
     if (!assetId) return
     setFormError(null)
@@ -239,12 +313,12 @@ export function AssetLogsPage() {
       </main>
     )
 
-  if (loadState === 'loading') return <main className="app">Loading logs…</main>
+  if (loadState === 'loading') return <main className="app">Loading…</main>
 
   if (loadState === 'error')
     return (
       <main className="app">
-        <p className="error">{loadError ?? 'Could not load logs.'}</p>
+        <p className="error">{loadError ?? 'Could not load asset.'}</p>
         <button type="button" className="btn" onClick={() => void load()}>
           Retry
         </button>
@@ -268,81 +342,70 @@ export function AssetLogsPage() {
   const editYearMax = Math.min(2100, Math.max(endYear, editYear))
   const editYearOptions = buildYearOptions(editYearMax)
 
-  const deleteModalOpen = deleteTarget != null
-  const blockRowActions = deleteModalOpen || editSaving || saving
-  const newLogLocked = editingLogId != null || editSaving
+  const deleteLogModalOpen = deleteTarget != null
+  const logsBusy =
+    deleteLogModalOpen || editSaving || saving || editAssetSaving || isEditingAsset || editingLogId != null
+  const newLogLocked = editingLogId != null || editSaving || isEditingAsset || editAssetSaving
+  const blockLogRowActions = deleteLogModalOpen || editSaving || saving || deleteAssetModalOpen || editAssetSaving
 
   return (
-    <main className="app asset-logs-page">
+    <main className="app asset-detail-page">
       <p className="page-back">
         <Link to="/assets">← Assets</Link>
       </p>
-      <h1>
-        <span className="asset-logs-title-swatch" style={{ backgroundColor: asset.color }} title={asset.name} />
-        Logs — {asset.name}
-      </h1>
-      <p className="muted">Add a monthly deposit and balance. One entry per month per asset. You can edit or remove past entries from the list.</p>
 
-      <div className="asset-logs-layout">
-        <section className="card asset-log-form-card">
-          <h2 className="card-title">New log</h2>
-          <form className="form" onSubmit={(ev) => void onSubmit(ev)}>
-            <div className="field-row field-row--period">
-              <label className="field">
-                <span>Year</span>
-                <select value={year} onChange={(ev) => setYear(Number(ev.target.value))} required disabled={newLogLocked}>
-                  {yearOptions.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Month</span>
-                <select value={month} onChange={(ev) => setMonth(Number(ev.target.value))} required disabled={newLogLocked}>
-                  {MONTH_OPTIONS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+      <header className="asset-detail-header">
+        {isEditingAsset ? (
+          <form className="asset-detail-edit card" onSubmit={(ev) => void onSaveAsset(ev)}>
+            <div className="asset-detail-edit-title-row">
+              <span className="asset-swatch asset-swatch--large" style={{ backgroundColor: editAssetColor }} />
+              <h1 className="asset-detail-edit-heading">Edit asset</h1>
             </div>
             <label className="field">
-              <span>Deposit</span>
-              <input
-                value={deposit}
-                onChange={(ev) => setDeposit(ev.target.value)}
-                inputMode="decimal"
-                placeholder="0"
-                autoComplete="off"
-                disabled={newLogLocked}
-              />
+              <span>Name</span>
+              <input value={editAssetName} onChange={(ev) => setEditAssetName(ev.target.value)} required maxLength={120} />
             </label>
-            <label className="field">
-              <span>Balance</span>
-              <input
-                value={balance}
-                onChange={(ev) => setBalance(ev.target.value)}
-                inputMode="decimal"
-                placeholder="0"
-                autoComplete="off"
-                disabled={newLogLocked}
-              />
-            </label>
-            {newLogLocked && <p className="hint">Finish or cancel the row edit before adding a new log.</p>}
-            {formError != null && <p className="error">{formError}</p>}
-            <button type="submit" className="btn primary" disabled={saving || newLogLocked}>
-              {saving ? 'Saving…' : 'Save log'}
-            </button>
+            <div className="field">
+              <span>Color</span>
+              <AssetColorPresets value={editAssetColor} onChange={setEditAssetColor} groupLabel={`Color for ${editAssetName || 'asset'}`} />
+            </div>
+            {editAssetError != null && <p className="error">{editAssetError}</p>}
+            <div className="asset-detail-header-actions">
+              <button type="button" className="btn" onClick={cancelEditAsset} disabled={editAssetSaving}>
+                Cancel
+              </button>
+              <button type="submit" className="btn primary" disabled={editAssetSaving}>
+                {editAssetSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           </form>
-        </section>
+        ) : (
+          <>
+            <div className="asset-detail-title-block">
+              <span className="asset-swatch asset-swatch--large" style={{ backgroundColor: asset.color }} title={asset.name} />
+              <div>
+                <h1 className="asset-detail-name">{asset.name}</h1>
+                <p className="asset-detail-date">Added {formatAssetDate(asset.createdAt)}</p>
+              </div>
+            </div>
+            <div className="asset-detail-header-actions">
+              <button type="button" className="btn" onClick={startEditAsset} disabled={logsBusy}>
+                Edit asset
+              </button>
+              <button type="button" className="btn btn-danger" onClick={() => setDeleteAssetModalOpen(true)} disabled={logsBusy}>
+                Delete asset
+              </button>
+            </div>
+          </>
+        )}
+      </header>
 
-        <section className="card asset-log-list-card">
-          <h2 className="card-title">Existing logs</h2>
+      <div className="asset-detail-stack">
+        <section className="card asset-detail-logs-card">
+          <h2 className="card-title">Logs</h2>
+          <p className="asset-detail-lead">Monthly deposit and balance. One entry per month.</p>
           {logs.length === 0 ? (
-            <p className="muted">No logs yet. Add the first one with the form.</p>
+            <p className="muted">No logs yet. Add one below.</p>
           ) : (
             <div className="table-wrap">
               <table className="logs-table">
@@ -359,7 +422,7 @@ export function AssetLogsPage() {
                     editingLogId === row.id ? (
                       <tr key={row.id} className="logs-table__row--editing">
                         <td colSpan={4}>
-                          <form className="log-row-edit" onSubmit={(ev) => void onSaveEdit(ev)}>
+                          <form className="log-row-edit" onSubmit={(ev) => void onSaveLogEdit(ev)}>
                             <div className="field-row field-row--period">
                               <label className="field">
                                 <span>Year</span>
@@ -412,7 +475,7 @@ export function AssetLogsPage() {
                             </label>
                             {editError != null && <p className="error">{editError}</p>}
                             <div className="log-row-edit-actions">
-                              <button type="button" className="btn" onClick={cancelEdit} disabled={editSaving}>
+                              <button type="button" className="btn" onClick={cancelEditLog} disabled={editSaving}>
                                 Cancel
                               </button>
                               <button type="submit" className="btn primary" disabled={editSaving}>
@@ -432,8 +495,8 @@ export function AssetLogsPage() {
                             <button
                               type="button"
                               className="btn"
-                              onClick={() => startEdit(row)}
-                              disabled={blockRowActions || (editingLogId != null && editingLogId !== row.id)}
+                              onClick={() => startEditLog(row)}
+                              disabled={blockLogRowActions || (editingLogId != null && editingLogId !== row.id) || isEditingAsset}
                             >
                               Edit
                             </button>
@@ -441,7 +504,7 @@ export function AssetLogsPage() {
                               type="button"
                               className="btn btn-danger"
                               onClick={() => setDeleteTarget(row)}
-                              disabled={blockRowActions || editingLogId != null}
+                              disabled={blockLogRowActions || editingLogId != null || isEditingAsset}
                             >
                               Delete
                             </button>
@@ -455,10 +518,65 @@ export function AssetLogsPage() {
             </div>
           )}
         </section>
+
+        <section className="card asset-detail-new-log-card">
+          <h2 className="card-title">New log</h2>
+          <form className="form" onSubmit={(ev) => void onSubmitNewLog(ev)}>
+            <div className="field-row field-row--period">
+              <label className="field">
+                <span>Year</span>
+                <select value={year} onChange={(ev) => setYear(Number(ev.target.value))} required disabled={newLogLocked}>
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Month</span>
+                <select value={month} onChange={(ev) => setMonth(Number(ev.target.value))} required disabled={newLogLocked}>
+                  {MONTH_OPTIONS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="field">
+              <span>Deposit</span>
+              <input
+                value={deposit}
+                onChange={(ev) => setDeposit(ev.target.value)}
+                inputMode="decimal"
+                placeholder="0"
+                autoComplete="off"
+                disabled={newLogLocked}
+              />
+            </label>
+            <label className="field">
+              <span>Balance</span>
+              <input
+                value={balance}
+                onChange={(ev) => setBalance(ev.target.value)}
+                inputMode="decimal"
+                placeholder="0"
+                autoComplete="off"
+                disabled={newLogLocked}
+              />
+            </label>
+            {newLogLocked && <p className="hint">Finish or cancel the row or asset edit before adding a log.</p>}
+            {formError != null && <p className="error">{formError}</p>}
+            <button type="submit" className="btn primary" disabled={saving || newLogLocked}>
+              {saving ? 'Saving…' : 'Save log'}
+            </button>
+          </form>
+        </section>
       </div>
 
       <ConfirmModal
-        open={deleteModalOpen}
+        open={deleteLogModalOpen}
         title="Delete log?"
         description={
           deleteTarget != null
@@ -469,7 +587,18 @@ export function AssetLogsPage() {
         cancelLabel="Cancel"
         danger
         onClose={() => setDeleteTarget(null)}
-        onConfirm={performDelete}
+        onConfirm={performDeleteLog}
+      />
+
+      <ConfirmModal
+        open={deleteAssetModalOpen}
+        title="Delete asset?"
+        description={`Permanently remove “${asset.name}” and all its logs? This cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
+        onClose={() => setDeleteAssetModalOpen(false)}
+        onConfirm={performDeleteAsset}
       />
     </main>
   )
