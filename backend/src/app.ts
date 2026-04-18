@@ -1,7 +1,7 @@
 import cookie from '@fastify/cookie'
-import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import Fastify from 'fastify'
+import { registerAppCors } from './cors/registerAppCors.js'
 import type { Env } from './config/env.js'
 import type { Db } from './db/client.js'
 import { registerAllLogsRoutes } from './routes/allLogs.js'
@@ -14,19 +14,13 @@ import { registerSettingsRoutes } from './routes/settings.js'
 export async function buildApp(env: Env, db: Db) {
   const app = Fastify({ logger: true, trustProxy: true })
 
+  await registerAppCors(app, env)
+
   await app.register(cookie)
   await app.register(jwt, {
     secret: env.JWT_SECRET,
     sign: { expiresIn: '7d' },
     cookie: { cookieName: 'token', signed: false },
-  })
-
-  const devOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173', 'http://127.0.0.1:4173']
-  const extraOrigins =
-    env.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter((s) => s.length > 0) ?? []
-  await app.register(cors, {
-    origin: [...devOrigins, ...extraOrigins],
-    credentials: true,
   })
 
   app.get('/api/health', async () => ({ ok: true }))

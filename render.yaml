@@ -2,7 +2,7 @@
 # After first deploy, set in the Render dashboard (Environment):
 #   DATABASE_URL, JWT_SECRET
 # If the UI is on another host (e.g. Vercel), also set:
-#   CORS_ORIGINS=https://your-app.vercel.app
+#   CORS_ORIGINS=https://your-app.vercel.app   (no trailing slash; or use CORS_ORIGIN for one URL)
 #   AUTH_COOKIE_SAME_SITE=none
 
 services:
