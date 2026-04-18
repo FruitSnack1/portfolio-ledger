@@ -1,7 +1,18 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import {
+  computeAssetLogStats,
+  formatPercentPLStat,
+  gainMoneyStatToneClass,
+  percentPLStatToneClass,
+} from '../asset/assetLogStats'
 import { ASSET_COLOR_PRESETS, DEFAULT_ASSET_COLOR } from '../asset/assetColorPalette'
 import { ApiError, apiJson } from '../api/client'
+import {
+  formatDisplayMoney,
+  formatDisplayMoneyFromString,
+  formatSignedDisplayMoney,
+} from '../currency/formatDisplayMoney'
 import { AssetColorPresets } from '../components/AssetColorPresets'
 import { ConfirmModal } from '../components/ConfirmModal'
 import type { AssetRow } from './AssetsPage'
@@ -114,6 +125,7 @@ export function AssetDetailPage() {
   const [editError, setEditError] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<AssetLogRow | null>(null)
+  const [displayCurrency, setDisplayCurrency] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!assetId) return
@@ -140,6 +152,22 @@ export function AssetDetailPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    void apiJson<{ user: { displayCurrency: string | null } }>('/api/auth/me')
+      .then((data) => {
+        if (!cancelled) setDisplayCurrency(data.user.displayCurrency)
+      })
+      .catch(() => {
+        if (!cancelled) setDisplayCurrency(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const logStats = useMemo(() => computeAssetLogStats(logs), [logs])
 
   function startEditAsset() {
     if (!asset) return
@@ -400,6 +428,33 @@ export function AssetDetailPage() {
         )}
       </header>
 
+      <section className="asset-detail-stats" aria-label="Portfolio summary">
+        <div className="asset-detail-stat">
+          <span className="asset-detail-stat-label">Current balance</span>
+          <span className="asset-detail-stat-value">
+            {formatDisplayMoney(logStats.currentBalance, displayCurrency)}
+          </span>
+        </div>
+        <div className="asset-detail-stat">
+          <span className="asset-detail-stat-label">Total deposits</span>
+          <span className="asset-detail-stat-value">
+            {logStats.hasLogs ? formatDisplayMoney(logStats.sumDeposits, displayCurrency) : '—'}
+          </span>
+        </div>
+        <div className="asset-detail-stat">
+          <span className="asset-detail-stat-label">P/L</span>
+          <span className={`asset-detail-stat-value${gainMoneyStatToneClass(logStats)}`}>
+            {logStats.hasLogs ? formatSignedDisplayMoney(logStats.gain, displayCurrency) : '—'}
+          </span>
+        </div>
+        <div className="asset-detail-stat">
+          <span className="asset-detail-stat-label">P/L %</span>
+          <span className={`asset-detail-stat-value${percentPLStatToneClass(logStats)}`}>
+            {formatPercentPLStat(logStats)}
+          </span>
+        </div>
+      </section>
+
       <div className="asset-detail-stack">
         <section className="card asset-detail-logs-card">
           <h2 className="card-title">Logs</h2>
@@ -488,8 +543,12 @@ export function AssetDetailPage() {
                     ) : (
                       <tr key={row.id}>
                         <td>{formatLogPeriod(row.year, row.month)}</td>
-                        <td className="logs-table__num">{formatNumericForInput(row.deposit)}</td>
-                        <td className="logs-table__num">{formatNumericForInput(row.balance)}</td>
+                        <td className="logs-table__num">
+                          {formatDisplayMoneyFromString(row.deposit, displayCurrency)}
+                        </td>
+                        <td className="logs-table__num">
+                          {formatDisplayMoneyFromString(row.balance, displayCurrency)}
+                        </td>
                         <td className="logs-table__actions">
                           <div className="logs-table__actions-inner">
                             <button

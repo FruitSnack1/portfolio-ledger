@@ -540,6 +540,53 @@ html[data-theme='dark'] .asset-card--link:hover {
   margin-top: 0.5rem;
 }
 
+.asset-detail-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.asset-detail-stat {
+  flex: 1 1 10rem;
+  min-width: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg-surface);
+}
+
+.asset-detail-stat-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.asset-detail-stat-value {
+  font-size: 1.125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.asset-detail-stat-value--gain {
+  color: var(--gain-text, #15803d);
+}
+
+.asset-detail-stat-value--loss {
+  color: var(--loss-text, #b91c1c);
+}
+
+html[data-theme='dark'] .asset-detail-stat-value--gain {
+  color: #4ade80;
+}
+
+html[data-theme='dark'] .asset-detail-stat-value--loss {
+  color: #f87171;
+}
+
 .asset-detail-title-block {
   display: flex;
   align-items: flex-start;
