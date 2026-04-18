@@ -333,11 +333,11 @@ export function AllLogsPage() {
   const deleteLogModalOpen = deleteTarget != null
   const blockLogRowActions = deleteLogModalOpen || bulkSubmitting || editModalLog != null || csvImportOpen
 
-  if (loadState === 'loading') return <main className="app">Loading logs…</main>
+  if (loadState === 'loading') return <main className="app all-logs-page">Loading logs…</main>
 
   if (loadState === 'error')
     return (
-      <main className="app">
+      <main className="app all-logs-page">
         <p className="error">{loadError ?? 'Could not load logs.'}</p>
         <button type="button" className="btn" onClick={() => void load()}>
           Retry
@@ -361,8 +361,8 @@ export function AllLogsPage() {
           </p>
         </div>
         <div className="all-logs-heading-actions">
-          <button type="button" className="btn assets-bulk-trigger" onClick={() => void openBulkModal()}>
-            Bulk import current month
+          <button type="button" className="btn primary all-logs-bulk-import-btn" onClick={() => void openBulkModal()}>
+            Bulk import
           </button>
           <div className="asset-detail-menu-wrap all-logs-csv-menu-wrap" ref={csvMenuRef}>
             <button
@@ -443,7 +443,6 @@ export function AllLogsPage() {
           </div>
 
           <section className="card all-logs-table-card">
-            <h2 className="card-title">Entries</h2>
             {filteredLogs.length === 0 ? (
               <p className="muted">No entries match the current filters.</p>
             ) : (

@@ -132,11 +132,11 @@ export function SettingsPage() {
     }
   }
 
-  if (loading) return <main className="app">Loading settings…</main>
+  if (loading) return <main className="app settings-page">Loading settings…</main>
 
   if (!user)
     return (
-      <main className="app">
+      <main className="app settings-page">
         <p className="error">You need to be signed in to view settings.</p>
         <Link to="/login" className="btn primary">
           Sign in

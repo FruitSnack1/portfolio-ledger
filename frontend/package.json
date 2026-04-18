@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@radix-ui/react-tooltip": "^1.2.8",
     "lightweight-charts": "^5.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

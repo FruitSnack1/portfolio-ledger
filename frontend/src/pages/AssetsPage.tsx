@@ -4,7 +4,7 @@ import { ASSET_COLOR_PRESETS, DEFAULT_ASSET_COLOR } from '../asset/assetColorPal
 import { formatPercentPLStat, percentPLStatToneClass, type AssetLogStats } from '../asset/assetLogStats'
 import { ApiError, apiJson } from '../api/client'
 import { formatDisplayMoneyFromString } from '../currency/formatDisplayMoney'
-import { AssetColorPresets } from '../components/AssetColorPresets'
+import { NewAssetModal } from '../components/NewAssetModal'
 
 export type AssetListSummary = {
   hasLogs: boolean
@@ -74,9 +74,10 @@ export function AssetsPage() {
   const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [color, setColor] = useState(DEFAULT_ASSET_COLOR)
+  const [color, setColor] = useState<string>(DEFAULT_ASSET_COLOR)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [newAssetModalOpen, setNewAssetModalOpen] = useState(false)
   const [displayCurrency, setDisplayCurrency] = useState<string | null>(null)
 
   useEffect(() => {
@@ -122,6 +123,18 @@ export function AssetsPage() {
     void load()
   }, [load])
 
+  function openNewAssetModal() {
+    setFormError(null)
+    setName('')
+    setColor(DEFAULT_ASSET_COLOR)
+    setNewAssetModalOpen(true)
+  }
+
+  function closeNewAssetModal() {
+    setNewAssetModalOpen(false)
+    setFormError(null)
+  }
+
   async function onCreate(e: FormEvent) {
     e.preventDefault()
     setFormError(null)
@@ -134,6 +147,7 @@ export function AssetsPage() {
       setAssets((prev) => [res.asset, ...prev])
       setName('')
       setColor(DEFAULT_ASSET_COLOR)
+      setNewAssetModalOpen(false)
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
         void navigate('/login', { replace: true })
@@ -146,11 +160,11 @@ export function AssetsPage() {
     }
   }
 
-  if (loadState === 'loading') return <main className="app">Loading assets…</main>
+  if (loadState === 'loading') return <main className="app assets-page">Loading assets…</main>
 
   if (loadState === 'error')
     return (
-      <main className="app">
+      <main className="app assets-page">
         <p className="error">{loadError ?? 'Could not load assets.'}</p>
         <button type="button" className="btn" onClick={() => void load()}>
           Retry
@@ -169,58 +183,55 @@ export function AssetsPage() {
           <h1 className="assets-page-title">Assets</h1>
           <p className="muted">Only you can see assets on this account. Click an asset to open its page.</p>
         </div>
+        <div className="assets-page-heading-actions">
+          <button type="button" className="btn primary" onClick={() => openNewAssetModal()}>
+            New asset
+          </button>
+        </div>
       </div>
 
-      <div className="assets-layout">
-        <section className="card asset-form-card">
-          <h2 className="card-title">New asset</h2>
-          <form className="form" onSubmit={(ev) => void onCreate(ev)}>
-            <label className="field">
-              <span>Name</span>
-              <input value={name} onChange={(ev) => setName(ev.target.value)} required maxLength={120} placeholder="e.g. S&P 500 ETF" />
-            </label>
-            <div className="field">
-              <span>Color</span>
-              <p className="hint color-hint">Pick a preset — these stay consistent for charts.</p>
-              <AssetColorPresets value={color} onChange={setColor} groupLabel="New asset color" />
-            </div>
-            {formError != null && <p className="error">{formError}</p>}
-            <button type="submit" className="btn primary" disabled={saving}>
-              {saving ? 'Saving…' : 'Create asset'}
-            </button>
-          </form>
-        </section>
-
-        <section className="asset-list-section">
-          <h2 className="card-title">Your assets</h2>
-          {assets.length === 0 ? (
-            <p className="muted">No assets yet. Create one with the form.</p>
-          ) : (
-            <ul className="asset-list">
-              {assets.map((a) => (
-                <li key={a.id}>
-                  <Link
-                    to={`/assets/${a.id}`}
-                    className={`asset-card asset-card--link${a.withdrawn ? ' asset-card--withdrawn' : ''}`}
-                  >
-                    <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
-                    <div className="asset-meta">
-                      <div className="asset-meta-top">
+      <section className="asset-list-section" aria-label="Your assets">
+        {assets.length === 0 ? (
+          <p className="muted">No assets yet. Use New asset above.</p>
+        ) : (
+          <ul className="asset-list">
+            {assets.map((a) => (
+              <li key={a.id}>
+                <Link
+                  to={`/assets/${a.id}`}
+                  className={`asset-card asset-card--link${a.withdrawn ? ' asset-card--withdrawn' : ''}`}
+                >
+                  <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
+                  <div className="asset-meta">
+                    <div className="asset-meta-top">
+                      <div className="asset-name-wrap">
                         <span className="asset-name">{a.name}</span>
-                        {a.withdrawn ? <span className="asset-withdrawn-pill">Withdrawn</span> : null}
                       </div>
-                      <AssetListStatsRow summary={a.summary ?? DEFAULT_ASSET_SUMMARY} displayCurrency={displayCurrency} />
+                      {a.withdrawn ? <span className="asset-withdrawn-pill">Withdrawn</span> : null}
                     </div>
-                    <span className="asset-card-chevron" aria-hidden>
-                      →
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+                    <AssetListStatsRow summary={a.summary ?? DEFAULT_ASSET_SUMMARY} displayCurrency={displayCurrency} />
+                  </div>
+                  <span className="asset-card-chevron" aria-hidden>
+                    →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <NewAssetModal
+        open={newAssetModalOpen}
+        onClose={closeNewAssetModal}
+        name={name}
+        color={color}
+        onNameChange={setName}
+        onColorChange={setColor}
+        formError={formError}
+        saving={saving}
+        onSubmit={onCreate}
+      />
     </main>
   )
 }

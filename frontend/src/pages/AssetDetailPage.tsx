@@ -18,6 +18,7 @@ import { HistogramBarChart } from '../components/charts/HistogramBarChart'
 import { AssetAddLogModal } from '../components/AssetAddLogModal'
 import { AssetEditLogModal } from '../components/AssetEditLogModal'
 import { AssetColorPresets } from '../components/AssetColorPresets'
+import { AppTooltip } from '../components/AppTooltip'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { Toast } from '../components/Toast'
 import { formatDbNumericForInput } from '../asset/formatDbNumericForInput'
@@ -520,14 +521,19 @@ export function AssetDetailPage() {
           <div className="asset-detail-header-row">
             <div className="asset-detail-title-block">
               <span className="asset-swatch asset-swatch--large" style={{ backgroundColor: asset.color }} title={asset.name} />
-              <div>
-                <h1 className="asset-detail-name">{asset.name}</h1>
-                {asset.withdrawn ? (
-                  <p className="asset-detail-subline">
-                    <span className="asset-withdrawn-pill">Withdrawn</span>
-                    <span className="muted"> Excluded from your home dashboard.</span>
-                  </p>
-                ) : null}
+              <div className="asset-detail-title-text">
+                <div className="asset-detail-name-row">
+                  <div className="asset-detail-name-wrap">
+                    <h1 className="asset-detail-name">{asset.name}</h1>
+                  </div>
+                  {asset.withdrawn ? (
+                    <AppTooltip content="Excluded from your home dashboard.">
+                      <span className="asset-withdrawn-pill" aria-label="Withdrawn. Excluded from your home dashboard.">
+                        Withdrawn
+                      </span>
+                    </AppTooltip>
+                  ) : null}
+                </div>
               </div>
             </div>
             <div className="asset-detail-header-actions">

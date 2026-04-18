@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, apiJson } from '../api/client'
-import { CurrencySettingsModal, type UserWithCurrency } from '../components/CurrencySettingsModal'
-import { DashboardView, type DashboardPayload } from '../components/dashboard/DashboardView'
+import {
+  CurrencySettingsModal,
+  type UserWithCurrency,
+} from '../components/CurrencySettingsModal'
+import {
+  DashboardView,
+  type DashboardPayload,
+} from '../components/dashboard/DashboardView'
 import { useTheme } from '../theme/ThemeProvider'
 
 type MeResponse = { user: UserWithCurrency }
@@ -13,7 +19,9 @@ export function HomePage() {
   const [loading, setLoading] = useState(true)
   const [currencyModalOpen, setCurrencyModalOpen] = useState(false)
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null)
-  const [dashState, setDashState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
+  const [dashState, setDashState] = useState<
+    'idle' | 'loading' | 'ok' | 'error'
+  >('idle')
   const [dashError, setDashError] = useState<string | null>(null)
   const [dashboardRev, setDashboardRev] = useState(0)
 
@@ -32,7 +40,8 @@ export function HomePage() {
       setDashState('idle')
     }
     window.addEventListener('portfolio-logout', onPortfolioLogout)
-    return () => window.removeEventListener('portfolio-logout', onPortfolioLogout)
+    return () =>
+      window.removeEventListener('portfolio-logout', onPortfolioLogout)
   }, [])
 
   useEffect(() => {
@@ -120,9 +129,15 @@ export function HomePage() {
       </div>
 
       {dashState === 'loading' && <p className="muted">Loading portfolio…</p>}
-      {dashState === 'error' && <p className="error">{dashError ?? 'Could not load dashboard.'}</p>}
+      {dashState === 'error' && (
+        <p className="error">{dashError ?? 'Could not load dashboard.'}</p>
+      )}
       {dashState === 'ok' && dashboard != null && (
-        <DashboardView data={dashboard} displayCurrency={user.displayCurrency} theme={resolved} />
+        <DashboardView
+          data={dashboard}
+          displayCurrency={user.displayCurrency}
+          theme={resolved}
+        />
       )}
 
       <CurrencySettingsModal
