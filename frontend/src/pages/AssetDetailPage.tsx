@@ -13,8 +13,13 @@ import {
   formatDisplayMoneyFromString,
   formatSignedDisplayMoney,
 } from '../currency/formatDisplayMoney'
+import { BalanceOverTimeChart } from '../components/charts/BalanceOverTimeChart'
+import { HistogramBarChart } from '../components/charts/HistogramBarChart'
 import { AssetColorPresets } from '../components/AssetColorPresets'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { balanceOverTimePointsAsc } from '../asset/logBalanceTimeSeries'
+import { defaultChartGainLossColors, monthlyPerformanceHistogramAsc } from '../asset/logMonthlyPerformanceSeries'
+import { useTheme } from '../theme/ThemeProvider'
 import type { AssetRow } from './AssetsPage'
 
 type AssetSummary = { id: string; name: string; color: string; createdAt: string }
@@ -98,6 +103,7 @@ function buildYearOptions(maxYear: number) {
 export function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>()
   const navigate = useNavigate()
+  const { resolved } = useTheme()
   const [asset, setAsset] = useState<AssetSummary | null>(null)
   const [logs, setLogs] = useState<AssetLogRow[]>([])
   const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading')
@@ -168,6 +174,22 @@ export function AssetDetailPage() {
   }, [])
 
   const logStats = useMemo(() => computeAssetLogStats(logs), [logs])
+  const balanceChartPoints = useMemo(() => balanceOverTimePointsAsc(logs), [logs])
+  const { moneyBars: monthlyMoneyBars, percentBars: monthlyPercentBars } = useMemo(
+    () => monthlyPerformanceHistogramAsc(logs, defaultChartGainLossColors(resolved)),
+    [logs, resolved],
+  )
+
+  const formatHistogramMoneyAxis = useCallback(
+    (n: number) => formatSignedDisplayMoney(n, displayCurrency),
+    [displayCurrency],
+  )
+
+  const formatHistogramPctAxis = useCallback((n: number) => {
+    if (!Number.isFinite(n)) return '—'
+    const sign = n > 0 ? '+' : ''
+    return `${sign}${n.toFixed(2)}%`
+  }, [])
 
   function startEditAsset() {
     if (!asset) return
@@ -454,6 +476,45 @@ export function AssetDetailPage() {
           </span>
         </div>
       </section>
+
+      {balanceChartPoints.length > 0 && (
+        <section className="card asset-detail-chart-card" aria-label="Balance over time">
+          <h2 className="card-title">Balance over time</h2>
+          <p className="asset-detail-lead">End-of-month balance from your logs.</p>
+          <BalanceOverTimeChart
+            points={balanceChartPoints}
+            lineColor={asset.color}
+            displayCurrency={displayCurrency}
+          />
+        </section>
+      )}
+
+      {monthlyMoneyBars.length > 0 && (
+        <div className="asset-detail-histogram-grid">
+          <section className="card asset-detail-histogram-card" aria-label="Monthly P/L">
+            <h2 className="card-title">Monthly P/L</h2>
+            <p className="asset-detail-lead">
+              Balance change vs the prior month, minus this month’s deposit (market effect). Green if up, red if down.
+            </p>
+            <HistogramBarChart
+              points={monthlyMoneyBars}
+              formatPrice={formatHistogramMoneyAxis}
+              resolvedTheme={resolved}
+            />
+          </section>
+          <section className="card asset-detail-histogram-card" aria-label="Monthly percent change">
+            <h2 className="card-title">Monthly % change</h2>
+            <p className="asset-detail-lead">
+              Return vs starting capital (prior month balance + this deposit). Gray when a percentage is not defined.
+            </p>
+            <HistogramBarChart
+              points={monthlyPercentBars}
+              formatPrice={formatHistogramPctAxis}
+              resolvedTheme={resolved}
+            />
+          </section>
+        </div>
+      )}
 
       <div className="asset-detail-stack">
         <section className="card asset-detail-logs-card">

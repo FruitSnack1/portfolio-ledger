@@ -154,6 +154,12 @@ html[data-theme='dark'] .theme-segment-btn[aria-pressed='true'] {
   max-width: 52rem;
 }
 
+.asset-detail-page .card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .app.narrow {
   max-width: 24rem;
 }
@@ -642,6 +648,34 @@ html[data-theme='dark'] .asset-detail-stat-value--loss {
 .asset-detail-edit-heading {
   margin: 0;
   font-size: 1.125rem;
+}
+
+.asset-detail-chart-card {
+  margin-top: 1.25rem;
+}
+
+.balance-over-time-chart {
+  width: 100%;
+  min-height: 260px;
+  margin-top: 0.35rem;
+}
+
+.asset-detail-histogram-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  margin-top: 1.25rem;
+  width: 100%;
+}
+
+.asset-detail-histogram-card .card-title {
+  margin-bottom: 0.35rem;
+}
+
+.histogram-bar-chart {
+  width: 100%;
+  min-height: 220px;
+  margin-top: 0.35rem;
 }
 
 .asset-detail-stack {
