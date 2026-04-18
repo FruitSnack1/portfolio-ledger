@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { ApiError, apiJson } from '../api/client'
 import { ThemeToggle } from '../components/ThemeToggle'
@@ -26,9 +26,11 @@ export function RootLayout() {
   const location = useLocation()
   const [user, setUser] = useState<UserWithCurrency | null>(null)
   const [sessionLoading, setSessionLoading] = useState(true)
+  const sessionHydrated = useRef(false)
 
   const loadSession = useCallback(async () => {
-    setSessionLoading(true)
+    const silent = sessionHydrated.current
+    if (!silent) setSessionLoading(true)
     try {
       const data = await apiJson<MeResponse>('/api/auth/me')
       setUser(data.user)
@@ -36,7 +38,8 @@ export function RootLayout() {
       if (e instanceof ApiError && e.status === 401) setUser(null)
       else setUser(null)
     } finally {
-      setSessionLoading(false)
+      if (!silent) setSessionLoading(false)
+      sessionHydrated.current = true
     }
   }, [])
 
@@ -59,25 +62,28 @@ export function RootLayout() {
         <Link to="/" className="brand">
           Portfolio Ledger
         </Link>
-        <div className="topbar-right">
-          <ThemeToggle />
-          <nav className="nav" aria-label="Main">
+        <div className="topbar-end">
+          <nav className="nav topbar-nav" aria-label="Main">
             <Link to="/">Home</Link>
-            <Link to="/assets">Assets</Link>
-            <Link to="/logs">Logs</Link>
-            {!sessionLoading && user != null ? <Link to="/settings">Settings</Link> : null}
+            {!sessionLoading && user != null ? (
+              <>
+                <Link to="/assets">Assets</Link>
+                <Link to="/logs">Logs</Link>
+                <Link to="/settings">Settings</Link>
+              </>
+            ) : null}
             {!sessionLoading && user == null ? (
               <Link to="/login" className="nav-sign-in">
                 Sign in
               </Link>
             ) : null}
-            {!sessionLoading && user != null ? (
-              <button type="button" className="nav-logout" onClick={() => void logout()}>
-                <LogoutIcon />
-                <span>Logout</span>
-              </button>
-            ) : null}
           </nav>
+          <ThemeToggle mode="lightDark" />
+          {!sessionLoading && user != null ? (
+            <button type="button" className="nav-logout" aria-label="Logout" title="Logout" onClick={() => void logout()}>
+              <LogoutIcon />
+            </button>
+          ) : null}
         </div>
       </header>
       <Outlet />

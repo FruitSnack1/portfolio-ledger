@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { ColorType, HistogramSeries, createChart } from 'lightweight-charts'
 import type { HistogramBarPoint } from '../../asset/logMonthlyPerformanceSeries'
+import { lightweightChartNoWheelCapture } from './lightweightChartNoWheelCapture'
 
 type HistogramBarChartProps = {
   points: readonly HistogramBarPoint[]
@@ -33,6 +34,7 @@ export function HistogramBarChart({ points, formatPrice, resolvedTheme, height =
 
     const colors = surfaceColors(resolvedTheme)
     const chart = createChart(wrap, {
+      ...lightweightChartNoWheelCapture,
       layout: {
         background: { type: ColorType.Solid, color: colors.background },
         textColor: colors.text,

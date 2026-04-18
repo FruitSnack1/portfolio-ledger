@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ColorType, LineSeries, createChart } from 'lightweight-charts'
+import { lightweightChartNoWheelCapture } from '../charts/lightweightChartNoWheelCapture'
 
 export type DualLinePoint = { time: string; value: number }
 
@@ -33,6 +34,7 @@ export function DualLinePortfolioChart({ seriesA, seriesB, formatPrice, resolved
 
     const colors = surfaceColors(resolvedTheme)
     const chart = createChart(wrap, {
+      ...lightweightChartNoWheelCapture,
       layout: {
         background: { type: ColorType.Solid, color: colors.background },
         textColor: colors.text,

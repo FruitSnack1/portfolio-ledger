@@ -54,17 +54,27 @@ body {
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
 }
 
-.topbar-right {
+.topbar-end {
+  margin-left: auto;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 1rem;
+  min-width: 0;
+}
+
+.topbar-nav {
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .brand {
@@ -110,15 +120,13 @@ body {
 .nav-logout {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.65rem;
+  justify-content: center;
+  padding: 0.4rem;
   border: none;
   border-radius: 0.45rem;
   background: transparent;
   color: var(--text-nav);
   font: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
   cursor: pointer;
 }
 
@@ -1177,18 +1185,15 @@ html[data-theme='dark'] .asset-detail-stat-value--loss {
 }
 
 .dashboard-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  margin-bottom: 0.25rem;
 }
 
-.dashboard-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
+.dashboard-header > h1 {
+  margin: 0 0 0.35rem;
+}
+
+.dashboard-header > .muted {
+  margin-top: 0;
 }
 
 .dashboard-stats {

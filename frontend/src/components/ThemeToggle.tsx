@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react'
 import { useTheme, type ThemePreference } from '../theme/ThemeProvider'
 
+export type ThemeToggleMode = 'all' | 'lightDark'
+
 function IconSun() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -27,18 +29,63 @@ function IconSystem() {
   )
 }
 
-const options: { value: ThemePreference; label: string; Icon: () => ReactElement }[] = [
+const optionsAll: { value: ThemePreference; label: string; Icon: () => ReactElement }[] = [
   { value: 'system', label: 'Match system appearance', Icon: IconSystem },
   { value: 'light', label: 'Light theme', Icon: IconSun },
   { value: 'dark', label: 'Dark theme', Icon: IconMoon },
 ]
 
-export function ThemeToggle() {
-  const { preference, setPreference } = useTheme()
+const optionsLightDark: { value: 'light' | 'dark'; label: string; Icon: () => ReactElement }[] = [
+  { value: 'light', label: 'Light theme', Icon: IconSun },
+  { value: 'dark', label: 'Dark theme', Icon: IconMoon },
+]
+
+function lightLooksActive(preference: ThemePreference, resolved: 'light' | 'dark') {
+  if (preference === 'light') return true
+  if (preference === 'system') return resolved === 'light'
+  return false
+}
+
+function darkLooksActive(preference: ThemePreference, resolved: 'light' | 'dark') {
+  if (preference === 'dark') return true
+  if (preference === 'system') return resolved === 'dark'
+  return false
+}
+
+type ThemeToggleProps = {
+  /** `lightDark` hides system — for the top bar; settings uses `all` (default). */
+  mode?: ThemeToggleMode
+}
+
+export function ThemeToggle({ mode = 'all' }: ThemeToggleProps) {
+  const { preference, resolved, setPreference } = useTheme()
+
+  if (mode === 'lightDark')
+    return (
+      <div className="theme-segment" role="group" aria-label="Theme">
+        {optionsLightDark.map(({ value, label, Icon }) => {
+          const pressed =
+            value === 'light' ? lightLooksActive(preference, resolved) : darkLooksActive(preference, resolved)
+          return (
+            <button
+              key={value}
+              type="button"
+              className="theme-segment-btn"
+              aria-pressed={pressed}
+              aria-label={label}
+              title={label}
+              onClick={() => setPreference(value)}
+            >
+              <Icon />
+            </button>
+          )
+        })}
+      </div>
+    )
 
   return (
     <div className="theme-segment" role="group" aria-label="Theme">
-      {options.map(({ value, label, Icon }) => (
+      {optionsAll.map(({ value, label, Icon }) => (
         <button
           key={value}
           type="button"

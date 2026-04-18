@@ -3,6 +3,7 @@ import { AreaSeries, ColorType, createChart } from 'lightweight-charts'
 import type { BalanceChartPoint } from '../../asset/logBalanceTimeSeries'
 import { formatDisplayMoney } from '../../currency/formatDisplayMoney'
 import { useTheme } from '../../theme/ThemeProvider'
+import { lightweightChartNoWheelCapture } from './lightweightChartNoWheelCapture'
 
 export type BalanceOverTimeChartProps = {
   points: readonly BalanceChartPoint[]
@@ -44,6 +45,7 @@ export function BalanceOverTimeChart({ points, lineColor, displayCurrency }: Bal
 
     const colors = chartColors(resolved)
     const chart = createChart(wrap, {
+      ...lightweightChartNoWheelCapture,
       layout: {
         background: { type: ColorType.Solid, color: colors.background },
         textColor: colors.text,

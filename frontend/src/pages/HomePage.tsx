@@ -113,20 +113,10 @@ export function HomePage() {
   return (
     <main className="app dashboard-page">
       <div className="dashboard-header">
-        <div>
-          <h1>Dashboard</h1>
-          <p className="muted">
-            Signed in as <strong>{user.email}</strong>
-          </p>
-        </div>
-        <div className="dashboard-header-actions">
-          <button type="button" className="link-btn" onClick={() => setCurrencyModalOpen(true)}>
-            Currency: {user.displayCurrency ?? 'Not set — tap'}
-          </button>
-          <Link to="/assets" className="btn">
-            Assets
-          </Link>
-        </div>
+        <h1>Dashboard</h1>
+        <p className="muted">
+          Signed in as <strong>{user.email}</strong>
+        </p>
       </div>
 
       {dashState === 'loading' && <p className="muted">Loading portfolio…</p>}

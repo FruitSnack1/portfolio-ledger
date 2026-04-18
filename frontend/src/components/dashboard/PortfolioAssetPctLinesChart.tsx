@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ColorType, LineSeries, createChart } from 'lightweight-charts'
+import { lightweightChartNoWheelCapture } from '../charts/lightweightChartNoWheelCapture'
 
 export type AssetPctSeries = {
   id: string
@@ -59,6 +60,7 @@ export function PortfolioAssetPctLinesChart({ seriesList, resolvedTheme }: Portf
 
     const colors = surfaceColors(resolvedTheme)
     const chart = createChart(wrap, {
+      ...lightweightChartNoWheelCapture,
       layout: {
         background: { type: ColorType.Solid, color: colors.background },
         textColor: colors.text,

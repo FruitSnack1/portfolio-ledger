@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ColorType, LineSeries, createChart } from 'lightweight-charts'
+import { lightweightChartNoWheelCapture } from '../charts/lightweightChartNoWheelCapture'
 import type { DashboardPlOverTimePoint } from './dashboardTypes'
 
 type PlOverTimeChartsProps = {
@@ -46,6 +47,7 @@ function PlMoneyLineChart({
 
     const colors = surfaceColors(resolvedTheme)
     const chart = createChart(wrap, {
+      ...lightweightChartNoWheelCapture,
       layout: {
         background: { type: ColorType.Solid, color: colors.background },
         textColor: colors.text,
@@ -100,6 +102,7 @@ function PlPctLineChart({
 
     const colors = surfaceColors(resolvedTheme)
     const chart = createChart(wrap, {
+      ...lightweightChartNoWheelCapture,
       layout: {
         background: { type: ColorType.Solid, color: colors.background },
         textColor: colors.text,
