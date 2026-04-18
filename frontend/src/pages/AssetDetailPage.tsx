@@ -17,6 +17,7 @@ import { BalanceOverTimeChart } from '../components/charts/BalanceOverTimeChart'
 import { HistogramBarChart } from '../components/charts/HistogramBarChart'
 import { AssetColorPresets } from '../components/AssetColorPresets'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { formatDbNumericForInput } from '../asset/formatDbNumericForInput'
 import { balanceOverTimePointsAsc } from '../asset/logBalanceTimeSeries'
 import { defaultChartGainLossColors, monthlyPerformanceHistogramAsc } from '../asset/logMonthlyPerformanceSeries'
 import { useTheme } from '../theme/ThemeProvider'
@@ -54,12 +55,6 @@ function formatAssetDate(iso: string) {
   return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
-function formatNumericForInput(raw: string) {
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return raw
-  return String(n)
-}
-
 function normalizePresetColor(hex: string) {
   const u = hex.toUpperCase()
   if (ASSET_COLOR_PRESETS.some((p) => p.hex === u)) return u
@@ -70,8 +65,8 @@ function depositBalanceFromLatestLog(logs: AssetLogRow[]) {
   if (logs.length === 0) return { deposit: '', balance: '' }
   const latest = logs[0]
   return {
-    deposit: formatNumericForInput(latest.deposit),
-    balance: formatNumericForInput(latest.balance),
+    deposit: formatDbNumericForInput(latest.deposit),
+    balance: formatDbNumericForInput(latest.balance),
   }
 }
 
@@ -312,8 +307,8 @@ export function AssetDetailPage() {
     setEditingLogId(row.id)
     setEditYear(row.year)
     setEditMonth(row.month)
-    setEditDeposit(formatNumericForInput(row.deposit))
-    setEditBalance(formatNumericForInput(row.balance))
+    setEditDeposit(formatDbNumericForInput(row.deposit))
+    setEditBalance(formatDbNumericForInput(row.balance))
     setEditError(null)
   }
 

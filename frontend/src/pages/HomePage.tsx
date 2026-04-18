@@ -17,6 +17,16 @@ export function HomePage() {
   const [dashError, setDashError] = useState<string | null>(null)
 
   useEffect(() => {
+    function onPortfolioLogout() {
+      setUser(null)
+      setDashboard(null)
+      setDashState('idle')
+    }
+    window.addEventListener('portfolio-logout', onPortfolioLogout)
+    return () => window.removeEventListener('portfolio-logout', onPortfolioLogout)
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
     apiJson<MeResponse>('/api/auth/me')
       .then((data) => {
@@ -73,23 +83,20 @@ export function HomePage() {
     if (user.displayCurrency == null) setCurrencyModalOpen(true)
   }, [user])
 
-  async function logout() {
-    await apiJson<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
-    setUser(null)
-    setDashboard(null)
-  }
-
   if (loading) return <main className="app">Checking session…</main>
 
   if (!user)
     return (
       <main className="app">
         <h1>Welcome</h1>
-        <p className="muted">Create an account or log in to continue.</p>
-        <p>
-          <Link to="/register">Register</Link>
-          {' · '}
-          <Link to="/login">Log in</Link>
+        <p className="muted">Sign in to view your portfolio dashboard.</p>
+        <p className="home-guest-actions">
+          <Link to="/login" className="btn primary">
+            Sign in
+          </Link>
+        </p>
+        <p className="muted home-guest-register">
+          New here? <Link to="/register">Create an account</Link>
         </p>
       </main>
     )
@@ -110,9 +117,6 @@ export function HomePage() {
           <Link to="/assets" className="btn">
             Assets
           </Link>
-          <button type="button" className="btn" onClick={() => void logout()}>
-            Log out
-          </button>
         </div>
       </div>
 

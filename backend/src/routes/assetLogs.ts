@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { formatDbNumericStringForClient } from '../asset/formatDbNumericString.js'
 import { requireUserId } from '../auth/requireUserId.js'
 import type { Db } from '../db/client.js'
 import { assetLogs, assets } from '../db/schema.js'
@@ -22,6 +23,16 @@ const postLogBodySchema = z.object({
 })
 
 const patchLogBodySchema = postLogBodySchema
+
+const bulkImportSubmitBodySchema = z.object({
+  entries: z.array(
+    z.object({
+      assetId: z.string().uuid(),
+      deposit: z.coerce.number().finite(),
+      balance: z.coerce.number().finite(),
+    }),
+  ),
+})
 
 const assetSummaryColumns = {
   id: assets.id,
@@ -63,6 +74,174 @@ async function loadOwnedAsset(db: Db, userId: string, assetId: string) {
 }
 
 export async function registerAssetLogRoutes(app: FastifyInstance, db: Db) {
+  app.get('/bulk-import/current-month-draft', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = await requireUserId(request, reply)
+    if (!userId) return
+
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth() + 1
+
+    try {
+      const activeAssets = await db
+        .select({ id: assets.id, name: assets.name, color: assets.color })
+        .from(assets)
+        .where(and(eq(assets.userId, userId), eq(assets.withdrawn, false)))
+
+      const rows: {
+        assetId: string
+        name: string
+        color: string
+        prefillDeposit: string
+        prefillBalance: string
+        blocked: boolean
+        blockReason: 'month_exists' | null
+      }[] = []
+
+      for (const a of activeAssets) {
+        const [existingThisMonth] = await db
+          .select(logReturnColumns)
+          .from(assetLogs)
+          .where(and(eq(assetLogs.assetId, a.id), eq(assetLogs.year, year), eq(assetLogs.month, month)))
+          .limit(1)
+
+        const [latest] = await db
+          .select(logReturnColumns)
+          .from(assetLogs)
+          .where(eq(assetLogs.assetId, a.id))
+          .orderBy(desc(assetLogs.year), desc(assetLogs.month))
+          .limit(1)
+
+        const blocked = existingThisMonth != null
+        if (blocked) {
+          rows.push({
+            assetId: a.id,
+            name: a.name,
+            color: a.color,
+            prefillDeposit: formatDbNumericStringForClient(existingThisMonth.deposit),
+            prefillBalance: formatDbNumericStringForClient(existingThisMonth.balance),
+            blocked: true,
+            blockReason: 'month_exists',
+          })
+          continue
+        }
+
+        rows.push({
+          assetId: a.id,
+          name: a.name,
+          color: a.color,
+          prefillDeposit: latest ? formatDbNumericStringForClient(latest.deposit) : '',
+          prefillBalance: latest ? formatDbNumericStringForClient(latest.balance) : '',
+          blocked: false,
+          blockReason: null,
+        })
+      }
+
+      return { year, month, rows }
+    } catch (error: unknown) {
+      request.log.error(error)
+      if (isMissingAssetLogsTable(error))
+        return reply.status(503).send({
+          error:
+            'Database is missing the asset_logs table. Apply migrations, then try again (npm run db:migrate -w backend).',
+        })
+      return reply.status(500).send({ error: 'Failed to load bulk import draft' })
+    }
+  })
+
+  app.post('/bulk-import/current-month', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = await requireUserId(request, reply)
+    if (!userId) return
+
+    const bodyParsed = bulkImportSubmitBodySchema.safeParse(request.body)
+    if (!bodyParsed.success) return reply.status(400).send({ error: 'Invalid entries payload' })
+
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth() + 1
+
+    try {
+      const createdRows: {
+        assetId: string
+        name: string
+        log: {
+          id: string
+          year: number
+          month: number
+          deposit: string
+          balance: string
+          createdAt: Date
+        }
+      }[] = []
+      const failed: { assetId: string; name: string; error: string }[] = []
+
+      for (const entry of bodyParsed.data.entries) {
+        const asset = await loadOwnedAsset(db, userId, entry.assetId)
+        if (!asset) {
+          failed.push({ assetId: entry.assetId, name: 'Unknown', error: 'Asset not found' })
+          continue
+        }
+        if (asset.withdrawn) {
+          failed.push({ assetId: entry.assetId, name: asset.name, error: 'Asset is withdrawn' })
+          continue
+        }
+
+        const [existingThisMonth] = await db
+          .select({ id: assetLogs.id })
+          .from(assetLogs)
+          .where(and(eq(assetLogs.assetId, entry.assetId), eq(assetLogs.year, year), eq(assetLogs.month, month)))
+          .limit(1)
+
+        if (existingThisMonth) {
+          failed.push({ assetId: entry.assetId, name: asset.name, error: 'Log for this month already exists' })
+          continue
+        }
+
+        try {
+          const [row] = await db
+            .insert(assetLogs)
+            .values({
+              assetId: entry.assetId,
+              year,
+              month,
+              deposit: String(entry.deposit),
+              balance: String(entry.balance),
+            })
+            .returning(logReturnColumns)
+
+          if (!row) continue
+          createdRows.push({
+            assetId: entry.assetId,
+            name: asset.name,
+            log: {
+              id: row.id,
+              year: row.year,
+              month: row.month,
+              deposit: String(row.deposit),
+              balance: String(row.balance),
+              createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(String(row.createdAt)),
+            },
+          })
+        } catch (error: unknown) {
+          request.log.error(error)
+          if (isUniqueViolation(error))
+            failed.push({ assetId: entry.assetId, name: asset.name, error: 'Log for this month already exists' })
+          else failed.push({ assetId: entry.assetId, name: asset.name, error: 'Could not save log' })
+        }
+      }
+
+      return { year, month, created: createdRows, failed }
+    } catch (error: unknown) {
+      request.log.error(error)
+      if (isMissingAssetLogsTable(error))
+        return reply.status(503).send({
+          error:
+            'Database is missing the asset_logs table. Apply migrations, then try again (npm run db:migrate -w backend).',
+        })
+      return reply.status(500).send({ error: 'Failed to bulk import logs' })
+    }
+  })
+
   app.get('/:assetId/logs', async (request: FastifyRequest, reply: FastifyReply) => {
     const userId = await requireUserId(request, reply)
     if (!userId) return
