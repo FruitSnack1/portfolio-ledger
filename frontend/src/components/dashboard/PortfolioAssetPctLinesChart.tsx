@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ColorType, LineSeries, createChart } from 'lightweight-charts'
+import { CHART_INTL_LOCALE } from '../charts/chartLocale'
 import { lightweightChartNoWheelCapture } from '../charts/lightweightChartNoWheelCapture'
 
 export type AssetPctSeries = {
@@ -81,6 +82,7 @@ export function PortfolioAssetPctLinesChart({ seriesList, resolvedTheme }: Portf
         fixRightEdge: true,
       },
       localization: {
+        locale: CHART_INTL_LOCALE,
         priceFormatter: formatPctAxis,
       },
       width: wrap.clientWidth,

@@ -13,9 +13,37 @@ export type ChartGainLossColors = {
   neutral: string
 }
 
+/** Aligned with P/L over time (money) candle chart and `--success` / `--error` in `index.css`. */
+const FALLBACK_GAIN_LOSS_LIGHT: ChartGainLossColors = {
+  pos: '#16a34a',
+  neg: '#dc2626',
+  neutral: '#64748b',
+}
+
+const FALLBACK_GAIN_LOSS_DARK: ChartGainLossColors = {
+  pos: '#4ade80',
+  neg: '#f87171',
+  neutral: '#94a3b8',
+}
+
+/** Matches `:root` / `html[data-theme='dark']` `--success`, `--error`, `--text-muted` when CSS is loaded. */
+export function chartGainLossColorsFromDocument(): ChartGainLossColors {
+  if (typeof document === 'undefined') return FALLBACK_GAIN_LOSS_LIGHT
+  const cs = getComputedStyle(document.documentElement)
+  const read = (name: string, fallback: string) => {
+    const v = cs.getPropertyValue(name).trim()
+    return v || fallback
+  }
+  return {
+    pos: read('--success', FALLBACK_GAIN_LOSS_LIGHT.pos),
+    neg: read('--error', FALLBACK_GAIN_LOSS_LIGHT.neg),
+    neutral: read('--text-muted', FALLBACK_GAIN_LOSS_LIGHT.neutral),
+  }
+}
+
 export function defaultChartGainLossColors(resolved: 'light' | 'dark'): ChartGainLossColors {
-  if (resolved === 'dark') return { pos: '#4ade80', neg: '#f87171', neutral: '#64748b' }
-  return { pos: '#15803d', neg: '#b91c1c', neutral: '#64748b' }
+  if (resolved === 'dark') return { ...FALLBACK_GAIN_LOSS_DARK }
+  return { ...FALLBACK_GAIN_LOSS_LIGHT }
 }
 
 export type HistogramBarPoint = {

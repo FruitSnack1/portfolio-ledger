@@ -1,3 +1,5 @@
+import { APP_INTL_LOCALE } from '../intl/appLocale'
+
 const FALLBACK_CURRENCY = 'USD'
 
 /** ISO 4217 code for Intl, or fallback when unset / invalid. */
@@ -6,18 +8,42 @@ export function resolveDisplayCurrencyCode(currencyCode: string | null | undefin
   return FALLBACK_CURRENCY
 }
 
-/** Formats a numeric amount with currency symbol (browser locale). */
+/** Uses a normal space instead of the locale’s grouping character (e.g. comma or narrow space). */
+function joinGroupingSpace(parts: readonly Intl.NumberFormatPart[]): string {
+  return parts.map((p) => (p.type === 'group' ? ' ' : p.value)).join('')
+}
+
+/**
+ * Formats a numeric amount (`APP_INTL_LOCALE`, space-separated digit groups).
+ * CZK is fixed as `111 111 Kč` (no decimals). Other currencies use Intl currency formatting.
+ */
 export function formatDisplayMoney(amount: number | null, currencyCode: string | null | undefined): string {
   if (amount == null || !Number.isFinite(amount)) return '—'
   const code = resolveDisplayCurrencyCode(currencyCode)
   try {
-    return new Intl.NumberFormat(undefined, {
+    if (code === 'CZK') {
+      const nf = new Intl.NumberFormat(APP_INTL_LOCALE, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+        useGrouping: true,
+      })
+      return `${joinGroupingSpace(nf.formatToParts(amount))} Kč`
+    }
+    const nf = new Intl.NumberFormat(APP_INTL_LOCALE, {
       style: 'currency',
       currency: code,
       currencyDisplay: 'symbol',
-    }).format(amount)
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    })
+    return joinGroupingSpace(nf.formatToParts(amount))
   } catch {
-    return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${code}`
+    if (code === 'CZK') {
+      const num = amount.toLocaleString(APP_INTL_LOCALE, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+      return `${num.replace(/,/g, ' ')} Kč`
+    }
+    const num = amount.toLocaleString(APP_INTL_LOCALE, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    return `${num.replace(/,/g, ' ')} ${code}`
   }
 }
 

@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ASSET_COLOR_PRESETS, DEFAULT_ASSET_COLOR } from '../asset/assetColorPalette'
 import { formatPercentPLStat, percentPLStatToneClass, type AssetLogStats } from '../asset/assetLogStats'
@@ -46,6 +46,31 @@ function assetColorLabel(hex: string) {
   const preset = ASSET_COLOR_PRESETS.find((p) => p.hex === hex.toUpperCase())
   if (preset) return `${preset.label} (${preset.hex})`
   return hex
+}
+
+function AssetListEntry({ asset: a, displayCurrency }: { asset: AssetRow; displayCurrency: string | null }) {
+  return (
+    <li>
+      <Link
+        to={`/assets/${a.id}`}
+        className={`asset-card asset-card--link${a.withdrawn ? ' asset-card--withdrawn' : ''}`}
+      >
+        <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
+        <div className="asset-meta">
+          <div className="asset-meta-top">
+            <div className="asset-name-wrap">
+              <span className="asset-name">{a.name}</span>
+            </div>
+            {a.withdrawn ? <span className="asset-withdrawn-pill">Withdrawn</span> : null}
+          </div>
+          <AssetListStatsRow summary={a.summary ?? DEFAULT_ASSET_SUMMARY} displayCurrency={displayCurrency} />
+        </div>
+        <span className="asset-card-chevron" aria-hidden>
+          →
+        </span>
+      </Link>
+    </li>
+  )
 }
 
 function AssetListStatsRow({
@@ -123,6 +148,9 @@ export function AssetsPage() {
     void load()
   }, [load])
 
+  const activeAssets = useMemo(() => assets.filter((a) => !a.withdrawn), [assets])
+  const withdrawnAssets = useMemo(() => assets.filter((a) => a.withdrawn), [assets])
+
   function openNewAssetModal() {
     setFormError(null)
     setName('')
@@ -190,36 +218,33 @@ export function AssetsPage() {
         </div>
       </div>
 
-      <section className="asset-list-section" aria-label="Your assets">
+      <section className="asset-list-section" aria-label="Active assets">
         {assets.length === 0 ? (
           <p className="muted">No assets yet. Use New asset above.</p>
+        ) : activeAssets.length === 0 ? (
+          <p className="muted">No active assets. Withdrawn positions are listed below.</p>
         ) : (
           <ul className="asset-list">
-            {assets.map((a) => (
-              <li key={a.id}>
-                <Link
-                  to={`/assets/${a.id}`}
-                  className={`asset-card asset-card--link${a.withdrawn ? ' asset-card--withdrawn' : ''}`}
-                >
-                  <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
-                  <div className="asset-meta">
-                    <div className="asset-meta-top">
-                      <div className="asset-name-wrap">
-                        <span className="asset-name">{a.name}</span>
-                      </div>
-                      {a.withdrawn ? <span className="asset-withdrawn-pill">Withdrawn</span> : null}
-                    </div>
-                    <AssetListStatsRow summary={a.summary ?? DEFAULT_ASSET_SUMMARY} displayCurrency={displayCurrency} />
-                  </div>
-                  <span className="asset-card-chevron" aria-hidden>
-                    →
-                  </span>
-                </Link>
-              </li>
+            {activeAssets.map((a) => (
+              <AssetListEntry key={a.id} asset={a} displayCurrency={displayCurrency} />
             ))}
           </ul>
         )}
       </section>
+
+      {withdrawnAssets.length > 0 ? (
+        <section className="asset-list-section" aria-label="Withdrawn assets">
+          <h2 className="assets-section-title">Withdrawn assets</h2>
+          <p className="muted assets-section-lead">
+            Excluded from your home dashboard. Open an asset to review history or unmark as withdrawn.
+          </p>
+          <ul className="asset-list">
+            {withdrawnAssets.map((a) => (
+              <AssetListEntry key={a.id} asset={a} displayCurrency={displayCurrency} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <NewAssetModal
         open={newAssetModalOpen}

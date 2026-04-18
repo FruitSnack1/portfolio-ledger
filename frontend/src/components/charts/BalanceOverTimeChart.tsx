@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { AreaSeries, ColorType, createChart } from 'lightweight-charts'
+import { ColorType, LineSeries, createChart } from 'lightweight-charts'
 import type { BalanceChartPoint } from '../../asset/logBalanceTimeSeries'
 import { formatDisplayMoney } from '../../currency/formatDisplayMoney'
 import { useTheme } from '../../theme/ThemeProvider'
+import { CHART_INTL_LOCALE } from './chartLocale'
 import { lightweightChartNoWheelCapture } from './lightweightChartNoWheelCapture'
 
 export type BalanceOverTimeChartProps = {
@@ -10,15 +11,10 @@ export type BalanceOverTimeChartProps = {
   /** Line color (e.g. asset swatch). */
   lineColor: string
   displayCurrency: string | null
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex.trim())
-  if (!m) return `rgba(100, 116, 139, ${alpha})`
-  const r = parseInt(m[1], 16)
-  const g = parseInt(m[2], 16)
-  const b = parseInt(m[3], 16)
-  return `rgba(${r},${g},${b},${alpha})`
+  /** Optional second line: cumulative deposits through each month (same time scale as balance). */
+  depositPoints?: readonly BalanceChartPoint[]
+  /** Stroke for the cumulative deposit line; defaults to a sky accent per theme. */
+  depositLineColor?: string
 }
 
 function chartColors(resolved: 'light' | 'dark') {
@@ -35,9 +31,22 @@ function chartColors(resolved: 'light' | 'dark') {
   }
 }
 
-export function BalanceOverTimeChart({ points, lineColor, displayCurrency }: BalanceOverTimeChartProps) {
+function defaultDepositLineColor(resolved: 'light' | 'dark') {
+  if (resolved === 'dark') return '#94a3b8'
+  return '#64748b'
+}
+
+export function BalanceOverTimeChart({
+  points,
+  lineColor,
+  displayCurrency,
+  depositPoints,
+  depositLineColor,
+}: BalanceOverTimeChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const { resolved } = useTheme()
+  const showDeposit = depositPoints != null && depositPoints.length > 0
+  const depositStroke = depositLineColor ?? defaultDepositLineColor(resolved)
 
   useEffect(() => {
     const wrap = wrapRef.current
@@ -66,23 +75,32 @@ export function BalanceOverTimeChart({ points, lineColor, displayCurrency }: Bal
         fixRightEdge: true,
       },
       localization: {
+        locale: CHART_INTL_LOCALE,
         priceFormatter: (price: number) => formatDisplayMoney(price, displayCurrency),
       },
       width: wrap.clientWidth,
       height: 260,
     })
 
-    const series = chart.addSeries(AreaSeries, {
-      lineColor,
+    if (showDeposit && depositPoints != null) {
+      const depositSeries = chart.addSeries(LineSeries, {
+        color: depositStroke,
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        lastValueVisible: true,
+        priceLineVisible: false,
+      })
+      depositSeries.setData([...depositPoints])
+    }
+
+    const balanceSeries = chart.addSeries(LineSeries, {
+      color: lineColor,
       lineWidth: 2,
-      topColor: hexToRgba(lineColor, 0.38),
-      bottomColor: hexToRgba(lineColor, 0),
-      relativeGradient: false,
       crosshairMarkerVisible: true,
       lastValueVisible: true,
       priceLineVisible: false,
     })
-    series.setData([...points])
+    balanceSeries.setData([...points])
 
     chart.timeScale().fitContent()
 
@@ -96,9 +114,25 @@ export function BalanceOverTimeChart({ points, lineColor, displayCurrency }: Bal
       ro.disconnect()
       chart.remove()
     }
-  }, [points, displayCurrency, lineColor, resolved])
+  }, [points, depositPoints, displayCurrency, lineColor, depositStroke, resolved, showDeposit])
 
   if (points.length === 0) return null
 
-  return <div ref={wrapRef} className="balance-over-time-chart" />
+  return (
+    <div>
+      <div ref={wrapRef} className="balance-over-time-chart" />
+      {showDeposit ? (
+        <ul className="dual-line-portfolio-legend" aria-label="Chart legend">
+          <li>
+            <span className="dual-line-portfolio-swatch" style={{ backgroundColor: lineColor }} aria-hidden />
+            Balance
+          </li>
+          <li>
+            <span className="dual-line-portfolio-swatch" style={{ backgroundColor: depositStroke }} aria-hidden />
+            Cumulative deposits
+          </li>
+        </ul>
+      ) : null}
+    </div>
+  )
 }

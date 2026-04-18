@@ -81,6 +81,7 @@ export type DashboardPayload = {
   }
   balanceOverTime: DashboardTimePoint[]
   cumulativeDepositsOverTime: DashboardTimePoint[]
+  portfolioMonthlyReturnMoney: DashboardTimePoint[]
   portfolioMonthlyReturnPercent: DashboardTimePoint[]
   depositsByMonth: DashboardDepositsByMonth[]
   plOverTime: DashboardPlOverTimePoint[]
@@ -278,6 +279,7 @@ export function buildDashboard(assets: readonly DashboardAssetInput[], logs: rea
   const mm = minMaxPeriod(allLogs)
   const balanceOverTime: DashboardTimePoint[] = []
   const cumulativeDepositsOverTime: DashboardTimePoint[] = []
+  const portfolioMonthlyReturnMoney: DashboardTimePoint[] = []
   const portfolioMonthlyReturnPercent: DashboardTimePoint[] = []
   const depositsByMonth: DashboardDepositsByMonth[] = []
   const plOverTime: DashboardPlOverTimePoint[] = []
@@ -318,6 +320,7 @@ export function buildDashboard(assets: readonly DashboardAssetInput[], logs: rea
       const moneyPL = currPortfolioEnd - prevPortfolioEnd - depositsThisMonth
       const startBase = prevPortfolioEnd + depositsThisMonth
       const pct = startBase > 0 ? (moneyPL / startBase) * 100 : 0
+      portfolioMonthlyReturnMoney.push({ time: t, value: moneyPL })
       portfolioMonthlyReturnPercent.push({ time: t, value: pct })
 
       depositsByMonth.push({ time: t, total: depositsThisMonth, byAsset: stackSlices })
@@ -391,6 +394,7 @@ export function buildDashboard(assets: readonly DashboardAssetInput[], logs: rea
     },
     balanceOverTime,
     cumulativeDepositsOverTime,
+    portfolioMonthlyReturnMoney,
     portfolioMonthlyReturnPercent,
     depositsByMonth,
     plOverTime,

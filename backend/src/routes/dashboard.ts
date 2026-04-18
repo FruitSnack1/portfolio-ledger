@@ -32,6 +32,7 @@ export async function registerDashboardRoutes(app: FastifyInstance, db: Db) {
           totals: { totalBalance: 0, totalDeposits: 0, plMoney: 0, plPercent: null as number | null },
           balanceOverTime: [],
           cumulativeDepositsOverTime: [],
+          portfolioMonthlyReturnMoney: [],
           portfolioMonthlyReturnPercent: [],
           depositsByMonth: [],
           plOverTime: [],

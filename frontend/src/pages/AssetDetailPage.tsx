@@ -22,8 +22,8 @@ import { AppTooltip } from '../components/AppTooltip'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { Toast } from '../components/Toast'
 import { formatDbNumericForInput } from '../asset/formatDbNumericForInput'
-import { balanceOverTimePointsAsc } from '../asset/logBalanceTimeSeries'
-import { defaultChartGainLossColors, monthlyPerformanceHistogramAsc } from '../asset/logMonthlyPerformanceSeries'
+import { balanceOverTimePointsAsc, cumulativeDepositOverTimePointsAsc } from '../asset/logBalanceTimeSeries'
+import { chartGainLossColorsFromDocument, monthlyPerformanceHistogramAsc } from '../asset/logMonthlyPerformanceSeries'
 import { useTheme } from '../theme/ThemeProvider'
 import type { AssetRow } from './AssetsPage'
 
@@ -198,9 +198,11 @@ export function AssetDetailPage() {
 
   const logStats = useMemo(() => computeAssetLogStats(logs), [logs])
   const balanceChartPoints = useMemo(() => balanceOverTimePointsAsc(logs), [logs])
+  const depositChartPoints = useMemo(() => cumulativeDepositOverTimePointsAsc(logs), [logs])
+  const histogramColors = useMemo(() => chartGainLossColorsFromDocument(), [resolved])
   const { moneyBars: monthlyMoneyBars, percentBars: monthlyPercentBars } = useMemo(
-    () => monthlyPerformanceHistogramAsc(logs, defaultChartGainLossColors(resolved)),
-    [logs, resolved],
+    () => monthlyPerformanceHistogramAsc(logs, histogramColors),
+    [logs, histogramColors],
   )
 
   const formatHistogramMoneyAxis = useCallback(
@@ -640,11 +642,12 @@ export function AssetDetailPage() {
       {balanceChartPoints.length > 0 && (
         <section className="card asset-detail-chart-card" aria-label="Balance over time">
           <h2 className="card-title">Balance over time</h2>
-          <p className="asset-detail-lead">End-of-month balance from your logs.</p>
+          <p className="asset-detail-lead">End-of-month balance and running total of deposits from your logs.</p>
           <BalanceOverTimeChart
             points={balanceChartPoints}
             lineColor={asset.color}
             displayCurrency={displayCurrency}
+            depositPoints={depositChartPoints}
           />
         </section>
       )}
@@ -660,6 +663,7 @@ export function AssetDetailPage() {
               points={monthlyMoneyBars}
               formatPrice={formatHistogramMoneyAxis}
               resolvedTheme={resolved}
+              symmetricZero
             />
           </section>
           <section className="card asset-detail-histogram-card" aria-label="Monthly percent change">
@@ -671,6 +675,7 @@ export function AssetDetailPage() {
               points={monthlyPercentBars}
               formatPrice={formatHistogramPctAxis}
               resolvedTheme={resolved}
+              symmetricZero
             />
           </section>
         </div>

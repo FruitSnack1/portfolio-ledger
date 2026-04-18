@@ -68,6 +68,7 @@ export type DashboardPayload = {
   totals: DashboardTotals
   balanceOverTime: DashboardTimePoint[]
   cumulativeDepositsOverTime: DashboardTimePoint[]
+  portfolioMonthlyReturnMoney: DashboardTimePoint[]
   portfolioMonthlyReturnPercent: DashboardTimePoint[]
   depositsByMonth: DashboardDepositsByMonth[]
   plOverTime: DashboardPlOverTimePoint[]

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { ColorType, HistogramSeries, createChart } from 'lightweight-charts'
 import type { HistogramBarPoint } from '../../asset/logMonthlyPerformanceSeries'
+import { CHART_INTL_LOCALE } from './chartLocale'
 import { lightweightChartNoWheelCapture } from './lightweightChartNoWheelCapture'
 
 type HistogramBarChartProps = {
@@ -9,6 +10,8 @@ type HistogramBarChartProps = {
   formatPrice: (value: number) => string
   resolvedTheme: 'light' | 'dark'
   height?: number
+  /** When true, Y scale is symmetric around 0 so the baseline sits in the middle. */
+  symmetricZero?: boolean
 }
 
 function surfaceColors(resolved: 'light' | 'dark') {
@@ -25,7 +28,23 @@ function surfaceColors(resolved: 'light' | 'dark') {
   }
 }
 
-export function HistogramBarChart({ points, formatPrice, resolvedTheme, height = 220 }: HistogramBarChartProps) {
+function symmetricHistogramHalfRange(values: readonly number[]): number {
+  let maxAbs = 0
+  for (const v of values) {
+    const a = Math.abs(v)
+    if (a > maxAbs) maxAbs = a
+  }
+  if (maxAbs === 0) return 1
+  return maxAbs * 1.12
+}
+
+export function HistogramBarChart({
+  points,
+  formatPrice,
+  resolvedTheme,
+  height = 220,
+  symmetricZero = false,
+}: HistogramBarChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -47,7 +66,7 @@ export function HistogramBarChart({ points, formatPrice, resolvedTheme, height =
       },
       rightPriceScale: {
         borderColor: colors.border,
-        scaleMargins: { top: 0.1, bottom: 0.1 },
+        scaleMargins: symmetricZero ? { top: 0.04, bottom: 0.04 } : { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
         borderColor: colors.border,
@@ -55,14 +74,16 @@ export function HistogramBarChart({ points, formatPrice, resolvedTheme, height =
         fixRightEdge: true,
       },
       localization: {
+        locale: CHART_INTL_LOCALE,
         priceFormatter: formatPrice,
       },
       width: wrap.clientWidth,
       height,
     })
 
+    const fallbackBarColor = points[0]?.color ?? colors.text
     const series = chart.addSeries(HistogramSeries, {
-      color: colors.text,
+      color: fallbackBarColor,
       base: 0,
       priceLineVisible: false,
       lastValueVisible: false,
@@ -71,9 +92,20 @@ export function HistogramBarChart({ points, formatPrice, resolvedTheme, height =
 
     chart.timeScale().fitContent()
 
+    function applySymmetricScale() {
+      const half = symmetricHistogramHalfRange(points.map((p) => p.value))
+      const rightScale = chart.priceScale('right')
+      rightScale.setAutoScale(false)
+      rightScale.setVisibleRange({ from: -half, to: half })
+    }
+
+    if (symmetricZero) applySymmetricScale()
+
     const ro = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width
-      if (w != null && w > 0) chart.applyOptions({ width: w })
+      if (w == null || w <= 0) return
+      chart.applyOptions({ width: w })
+      if (symmetricZero) applySymmetricScale()
     })
     ro.observe(wrap)
 
@@ -81,7 +113,7 @@ export function HistogramBarChart({ points, formatPrice, resolvedTheme, height =
       ro.disconnect()
       chart.remove()
     }
-  }, [points, formatPrice, resolvedTheme, height])
+  }, [points, formatPrice, resolvedTheme, height, symmetricZero])
 
   if (points.length === 0) return null
 

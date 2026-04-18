@@ -1,5 +1,6 @@
 import { type Dispatch, type MouseEvent, type SetStateAction, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { APP_INTL_LOCALE } from '../intl/appLocale'
 
 export type BulkDraftRow = {
   assetId: string
@@ -18,7 +19,7 @@ export type BulkDraftResponse = {
 }
 
 function formatBulkMonthLabel(year: number, month: number) {
-  return new Date(year, month - 1, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' })
+  return new Date(year, month - 1, 1).toLocaleString(APP_INTL_LOCALE, { month: 'long', year: 'numeric' })
 }
 
 export type BulkImportModalProps = {

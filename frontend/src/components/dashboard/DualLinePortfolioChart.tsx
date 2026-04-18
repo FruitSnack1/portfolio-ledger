@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ColorType, LineSeries, createChart } from 'lightweight-charts'
+import { CHART_INTL_LOCALE } from '../charts/chartLocale'
 import { lightweightChartNoWheelCapture } from '../charts/lightweightChartNoWheelCapture'
 
 export type DualLinePoint = { time: string; value: number }
@@ -55,6 +56,7 @@ export function DualLinePortfolioChart({ seriesA, seriesB, formatPrice, resolved
         fixRightEdge: true,
       },
       localization: {
+        locale: CHART_INTL_LOCALE,
         priceFormatter: formatPrice,
       },
       width: wrap.clientWidth,
