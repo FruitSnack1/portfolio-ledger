@@ -7,6 +7,7 @@ import type { Db } from './db/client.js'
 import { registerAssetLogRoutes } from './routes/assetLogs.js'
 import { registerAssetRoutes } from './routes/assets.js'
 import { registerAuthRoutes } from './routes/auth.js'
+import { registerDashboardRoutes } from './routes/dashboard.js'
 
 export async function buildApp(env: Env, db: Db) {
   const app = Fastify({ logger: true })
@@ -34,6 +35,10 @@ export async function buildApp(env: Env, db: Db) {
     await registerAssetLogRoutes(instance, db)
     await registerAssetRoutes(instance, db)
   }, { prefix: '/api/assets' })
+
+  await app.register(async (instance) => {
+    await registerDashboardRoutes(instance, db)
+  }, { prefix: '/api/dashboard' })
 
   return app
 }

@@ -2,13 +2,19 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, apiJson } from '../api/client'
 import { CurrencySettingsModal, type UserWithCurrency } from '../components/CurrencySettingsModal'
+import { DashboardView, type DashboardPayload } from '../components/dashboard/DashboardView'
+import { useTheme } from '../theme/ThemeProvider'
 
 type MeResponse = { user: UserWithCurrency }
 
 export function HomePage() {
+  const { resolved } = useTheme()
   const [user, setUser] = useState<UserWithCurrency | null>(null)
   const [loading, setLoading] = useState(true)
   const [currencyModalOpen, setCurrencyModalOpen] = useState(false)
+  const [dashboard, setDashboard] = useState<DashboardPayload | null>(null)
+  const [dashState, setDashState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
+  const [dashError, setDashError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -30,6 +36,37 @@ export function HomePage() {
 
   useEffect(() => {
     if (!user) {
+      setDashboard(null)
+      setDashState('idle')
+      return
+    }
+    let cancelled = false
+    setDashState('loading')
+    setDashError(null)
+    void apiJson<DashboardPayload>('/api/dashboard')
+      .then((data) => {
+        if (!cancelled) {
+          setDashboard(data)
+          setDashState('ok')
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        if (e instanceof ApiError && e.status === 401) {
+          setUser(null)
+          return
+        }
+        if (e instanceof ApiError) setDashError(e.message)
+        else setDashError('Could not load dashboard')
+        setDashState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) {
       setCurrencyModalOpen(false)
       return
     }
@@ -39,6 +76,7 @@ export function HomePage() {
   async function logout() {
     await apiJson<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
     setUser(null)
+    setDashboard(null)
   }
 
   if (loading) return <main className="app">Checking session…</main>
@@ -57,26 +95,32 @@ export function HomePage() {
     )
 
   return (
-    <main className="app">
-      <h1>Signed in</h1>
-      <p className="muted">
-        Logged in as <strong>{user.email}</strong>
-      </p>
-      <p className="settings-row">
-        <span className="muted">Display currency:</span>{' '}
-        <button type="button" className="link-btn" onClick={() => setCurrencyModalOpen(true)}>
-          {user.displayCurrency ?? 'Not set — tap to choose'}
-        </button>
-      </p>
-      <p className="settings-row">
-        <Link to="/assets" className="link-btn">
-          Manage assets
-        </Link>
-      </p>
-      <button type="button" className="btn" onClick={() => void logout()}>
-        Log out
-      </button>
-      <p className="muted small">Monthly logs and dashboard will follow.</p>
+    <main className="app dashboard-page">
+      <div className="dashboard-header">
+        <div>
+          <h1>Dashboard</h1>
+          <p className="muted">
+            Signed in as <strong>{user.email}</strong>
+          </p>
+        </div>
+        <div className="dashboard-header-actions">
+          <button type="button" className="link-btn" onClick={() => setCurrencyModalOpen(true)}>
+            Currency: {user.displayCurrency ?? 'Not set — tap'}
+          </button>
+          <Link to="/assets" className="btn">
+            Assets
+          </Link>
+          <button type="button" className="btn" onClick={() => void logout()}>
+            Log out
+          </button>
+        </div>
+      </div>
+
+      {dashState === 'loading' && <p className="muted">Loading portfolio…</p>}
+      {dashState === 'error' && <p className="error">{dashError ?? 'Could not load dashboard.'}</p>}
+      {dashState === 'ok' && dashboard != null && (
+        <DashboardView data={dashboard} displayCurrency={user.displayCurrency} theme={resolved} />
+      )}
 
       <CurrencySettingsModal
         open={currencyModalOpen}
