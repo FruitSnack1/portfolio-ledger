@@ -1,21 +1,71 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ASSET_COLOR_PRESETS, DEFAULT_ASSET_COLOR } from '../asset/assetColorPalette'
+import { formatPercentPLStat, percentPLStatToneClass, type AssetLogStats } from '../asset/assetLogStats'
 import { ApiError, apiJson } from '../api/client'
+import { formatDisplayMoneyFromString } from '../currency/formatDisplayMoney'
 import { AssetColorPresets } from '../components/AssetColorPresets'
 
-export type AssetRow = { id: string; name: string; color: string; createdAt: string; withdrawn: boolean }
+export type AssetListSummary = {
+  hasLogs: boolean
+  currentBalance: string | null
+  sumDeposits: number
+  percentPL: number | null
+}
 
-function formatAssetDate(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
+export type AssetRow = {
+  id: string
+  name: string
+  color: string
+  createdAt: string
+  withdrawn: boolean
+  summary?: AssetListSummary
+}
+
+const DEFAULT_ASSET_SUMMARY: AssetListSummary = {
+  hasLogs: false,
+  currentBalance: null,
+  sumDeposits: 0,
+  percentPL: null,
+}
+
+/** Maps API list summary to stats helpers (balance / P/L % display). */
+function summaryToStats(summary: AssetListSummary): AssetLogStats {
+  const balanceNum = summary.currentBalance != null ? Number(summary.currentBalance) : null
+  const balOk = balanceNum != null && Number.isFinite(balanceNum)
+  return {
+    hasLogs: summary.hasLogs,
+    currentBalance: balOk ? balanceNum : null,
+    sumDeposits: summary.sumDeposits,
+    gain: summary.hasLogs && balOk ? balanceNum - summary.sumDeposits : null,
+    percentPL: summary.percentPL,
+  }
 }
 
 function assetColorLabel(hex: string) {
   const preset = ASSET_COLOR_PRESETS.find((p) => p.hex === hex.toUpperCase())
   if (preset) return `${preset.label} (${preset.hex})`
   return hex
+}
+
+function AssetListStatsRow({
+  summary,
+  displayCurrency,
+}: {
+  summary: AssetListSummary
+  displayCurrency: string | null
+}) {
+  const stats = summaryToStats(summary)
+  const balanceLabel =
+    summary.hasLogs && summary.currentBalance != null
+      ? formatDisplayMoneyFromString(summary.currentBalance, displayCurrency)
+      : '—'
+  return (
+    <div className="asset-list-stats" aria-label="Balance and return">
+      <span className="muted asset-list-stat-amount">{balanceLabel}</span>
+      <span className={`asset-list-stat-pl${percentPLStatToneClass(stats)}`}>{formatPercentPLStat(stats)}</span>
+    </div>
+  )
 }
 
 export function AssetsPage() {
@@ -27,6 +77,21 @@ export function AssetsPage() {
   const [color, setColor] = useState(DEFAULT_ASSET_COLOR)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [displayCurrency, setDisplayCurrency] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void apiJson<{ user: { displayCurrency: string | null } }>('/api/auth/me')
+      .then((data) => {
+        if (!cancelled) setDisplayCurrency(data.user.displayCurrency)
+      })
+      .catch(() => {
+        if (!cancelled) setDisplayCurrency(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -140,12 +205,11 @@ export function AssetsPage() {
                   >
                     <span className="asset-swatch" style={{ backgroundColor: a.color }} title={assetColorLabel(a.color)} />
                     <div className="asset-meta">
-                      <span className="asset-name">{a.name}</span>
-                      {a.withdrawn ? (
-                        <span className="asset-withdrawn-pill">Withdrawn</span>
-                      ) : (
-                        <span className="muted asset-date">{formatAssetDate(a.createdAt)}</span>
-                      )}
+                      <div className="asset-meta-top">
+                        <span className="asset-name">{a.name}</span>
+                        {a.withdrawn ? <span className="asset-withdrawn-pill">Withdrawn</span> : null}
+                      </div>
+                      <AssetListStatsRow summary={a.summary ?? DEFAULT_ASSET_SUMMARY} displayCurrency={displayCurrency} />
                     </div>
                     <span className="asset-card-chevron" aria-hidden>
                       →

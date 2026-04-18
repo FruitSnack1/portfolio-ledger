@@ -1,11 +1,37 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { desc, eq } from 'drizzle-orm'
+import { z } from 'zod'
+import { importLogsCsv } from '../csv/importLogsCsv.js'
 import { formatDbNumericStringForClient } from '../asset/formatDbNumericString.js'
 import { requireUserId } from '../auth/requireUserId.js'
 import type { Db } from '../db/client.js'
 import { assetLogs, assets } from '../db/schema.js'
 
+const importCsvBodySchema = z.object({
+  csv: z.string().min(1).max(1_500_000),
+})
+
 export async function registerAllLogsRoutes(app: FastifyInstance, db: Db) {
+  app.post(
+    '/import-csv',
+    { bodyLimit: 3 * 1024 * 1024 },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = await requireUserId(request, reply)
+      if (!userId) return
+
+      const parsed = importCsvBodySchema.safeParse(request.body)
+      if (!parsed.success) return reply.status(400).send({ error: 'Invalid body: send JSON { "csv": "..." }' })
+
+      try {
+        const result = await importLogsCsv(db, userId, parsed.data.csv)
+        return result
+      } catch (error: unknown) {
+        request.log.error(error)
+        return reply.status(500).send({ error: 'CSV import failed' })
+      }
+    },
+  )
+
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const userId = await requireUserId(request, reply)
     if (!userId) return

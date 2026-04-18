@@ -15,8 +15,11 @@ import {
 } from '../currency/formatDisplayMoney'
 import { BalanceOverTimeChart } from '../components/charts/BalanceOverTimeChart'
 import { HistogramBarChart } from '../components/charts/HistogramBarChart'
+import { AssetAddLogModal } from '../components/AssetAddLogModal'
+import { AssetEditLogModal } from '../components/AssetEditLogModal'
 import { AssetColorPresets } from '../components/AssetColorPresets'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { Toast } from '../components/Toast'
 import { formatDbNumericForInput } from '../asset/formatDbNumericForInput'
 import { balanceOverTimePointsAsc } from '../asset/logBalanceTimeSeries'
 import { defaultChartGainLossColors, monthlyPerformanceHistogramAsc } from '../asset/logMonthlyPerformanceSeries'
@@ -48,12 +51,6 @@ const MONTH_OPTIONS = [
   { value: 11, label: 'November' },
   { value: 12, label: 'December' },
 ] as const
-
-function formatAssetDate(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
-}
 
 function normalizePresetColor(hex: string) {
   const u = hex.toUpperCase()
@@ -131,11 +128,15 @@ export function AssetDetailPage() {
   const [editSaving, setEditSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<AssetLogRow | null>(null)
   const [displayCurrency, setDisplayCurrency] = useState<string | null>(null)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [addLogModalOpen, setAddLogModalOpen] = useState(false)
 
-  const load = useCallback(async () => {
+  const clearToast = useCallback(() => setToastMessage(null), [])
+
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!assetId) return
     setLoadError(null)
-    setLoadState('loading')
+    if (!opts?.silent) setLoadState('loading')
     try {
       const data = await apiJson<{ asset: AssetSummary; logs: AssetLogRow[] }>(`/api/assets/${assetId}/logs`)
       setAsset(data.asset)
@@ -317,6 +318,18 @@ export function AssetDetailPage() {
     setEditError(null)
   }
 
+  function openAddLogModal() {
+    setAssetMenuOpen(false)
+    setFormError(null)
+    applyCurrentPeriodAndLatestDefaults(logs, setYear, setMonth, setDeposit, setBalance)
+    setAddLogModalOpen(true)
+  }
+
+  function closeAddLogModal() {
+    setAddLogModalOpen(false)
+    setFormError(null)
+  }
+
   async function onSaveLogEdit(e: FormEvent) {
     e.preventDefault()
     if (!assetId || !editingLogId) return
@@ -343,7 +356,8 @@ export function AssetDetailPage() {
         }),
       })
       cancelEditLog()
-      await load()
+      setToastMessage(`Log saved for ${formatLogPeriod(editYear, editMonth)}`)
+      await load({ silent: true })
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
         void navigate('/login', { replace: true })
@@ -363,7 +377,8 @@ export function AssetDetailPage() {
       await apiJson<{ ok: boolean }>(`/api/assets/${assetId}/logs/${target.id}`, { method: 'DELETE' })
       setDeleteTarget(null)
       if (editingLogId === target.id) cancelEditLog()
-      await load()
+      setToastMessage('Log deleted')
+      await load({ silent: true })
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
         setDeleteTarget(null)
@@ -395,7 +410,9 @@ export function AssetDetailPage() {
         method: 'POST',
         body: JSON.stringify({ year, month, deposit: depositNum, balance: balanceNum }),
       })
-      await load()
+      setAddLogModalOpen(false)
+      setToastMessage(`Log added for ${formatLogPeriod(year, month)}`)
+      await load({ silent: true })
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
         void navigate('/login', { replace: true })
@@ -453,13 +470,23 @@ export function AssetDetailPage() {
     editAssetSaving ||
     isEditingAsset ||
     editingLogId != null ||
-    withdrawnSaving
+    withdrawnSaving ||
+    addLogModalOpen
   const newLogLocked = editingLogId != null || editSaving || isEditingAsset || editAssetSaving
   const blockLogRowActions =
-    deleteLogModalOpen || editSaving || saving || deleteAssetModalOpen || editAssetSaving || withdrawnSaving
+    deleteLogModalOpen ||
+    editSaving ||
+    saving ||
+    deleteAssetModalOpen ||
+    editAssetSaving ||
+    withdrawnSaving ||
+    addLogModalOpen ||
+    editingLogId != null
 
   return (
     <main className="app asset-detail-page">
+      <Toast message={toastMessage} onRequestClear={clearToast} />
+
       <p className="page-back">
         <Link to="/assets">← Assets</Link>
       </p>
@@ -495,7 +522,6 @@ export function AssetDetailPage() {
               <span className="asset-swatch asset-swatch--large" style={{ backgroundColor: asset.color }} title={asset.name} />
               <div>
                 <h1 className="asset-detail-name">{asset.name}</h1>
-                <p className="asset-detail-date">Added {formatAssetDate(asset.createdAt)}</p>
                 {asset.withdrawn ? (
                   <p className="asset-detail-subline">
                     <span className="asset-withdrawn-pill">Withdrawn</span>
@@ -504,25 +530,34 @@ export function AssetDetailPage() {
                 ) : null}
               </div>
             </div>
-            <div className="asset-detail-menu-wrap" ref={menuWrapRef}>
+            <div className="asset-detail-header-actions">
               <button
                 type="button"
-                className="asset-detail-menu-trigger"
-                aria-label="Asset actions"
-                aria-haspopup="menu"
-                aria-expanded={assetMenuOpen}
-                disabled={logsBusy}
-                onClick={() => {
-                  setAssetPatchError(null)
-                  setAssetMenuOpen((open) => !open)
-                }}
+                className="btn primary asset-detail-add-log-btn"
+                disabled={newLogLocked || saving || addLogModalOpen}
+                onClick={() => openAddLogModal()}
               >
-                <span className="asset-detail-menu-dots" aria-hidden>
-                  &#8942;
-                </span>
+                Add log
               </button>
-              {assetMenuOpen ? (
-                <ul className="asset-detail-menu" role="menu">
+              <div className="asset-detail-menu-wrap" ref={menuWrapRef}>
+                <button
+                  type="button"
+                  className="asset-detail-menu-trigger"
+                  aria-label="Asset actions"
+                  aria-haspopup="menu"
+                  aria-expanded={assetMenuOpen}
+                  disabled={logsBusy}
+                  onClick={() => {
+                    setAssetPatchError(null)
+                    setAssetMenuOpen((open) => !open)
+                  }}
+                >
+                  <span className="asset-detail-menu-dots" aria-hidden>
+                    &#8942;
+                  </span>
+                </button>
+                {assetMenuOpen ? (
+                  <ul className="asset-detail-menu" role="menu">
                   <li role="none">
                     <button
                       type="button"
@@ -560,7 +595,8 @@ export function AssetDetailPage() {
                     </button>
                   </li>
                 </ul>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           </div>
         )}
@@ -639,7 +675,7 @@ export function AssetDetailPage() {
           <h2 className="card-title">Logs</h2>
           <p className="asset-detail-lead">Monthly deposit and balance. One entry per month.</p>
           {logs.length === 0 ? (
-            <p className="muted">No logs yet. Add one below.</p>
+            <p className="muted">No logs yet. Use Add log above.</p>
           ) : (
             <div className="table-wrap">
               <table className="logs-table">
@@ -652,166 +688,81 @@ export function AssetDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.map((row) =>
-                    editingLogId === row.id ? (
-                      <tr key={row.id} className="logs-table__row--editing">
-                        <td colSpan={4}>
-                          <form className="log-row-edit" onSubmit={(ev) => void onSaveLogEdit(ev)}>
-                            <div className="field-row field-row--period">
-                              <label className="field">
-                                <span>Year</span>
-                                <select
-                                  value={editYear}
-                                  onChange={(ev) => setEditYear(Number(ev.target.value))}
-                                  required
-                                  disabled={editSaving}
-                                >
-                                  {editYearOptions.map((y) => (
-                                    <option key={y} value={y}>
-                                      {y}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="field">
-                                <span>Month</span>
-                                <select
-                                  value={editMonth}
-                                  onChange={(ev) => setEditMonth(Number(ev.target.value))}
-                                  required
-                                  disabled={editSaving}
-                                >
-                                  {MONTH_OPTIONS.map((m) => (
-                                    <option key={m.value} value={m.value}>
-                                      {m.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            </div>
-                            <label className="field">
-                              <span>Deposit</span>
-                              <input
-                                value={editDeposit}
-                                onChange={(ev) => setEditDeposit(ev.target.value)}
-                                inputMode="decimal"
-                                disabled={editSaving}
-                              />
-                            </label>
-                            <label className="field">
-                              <span>Balance</span>
-                              <input
-                                value={editBalance}
-                                onChange={(ev) => setEditBalance(ev.target.value)}
-                                inputMode="decimal"
-                                disabled={editSaving}
-                              />
-                            </label>
-                            {editError != null && <p className="error">{editError}</p>}
-                            <div className="log-row-edit-actions">
-                              <button type="button" className="btn" onClick={cancelEditLog} disabled={editSaving}>
-                                Cancel
-                              </button>
-                              <button type="submit" className="btn primary" disabled={editSaving}>
-                                {editSaving ? 'Saving…' : 'Save'}
-                              </button>
-                            </div>
-                          </form>
-                        </td>
-                      </tr>
-                    ) : (
-                      <tr key={row.id}>
-                        <td>{formatLogPeriod(row.year, row.month)}</td>
-                        <td className="logs-table__num">
-                          {formatDisplayMoneyFromString(row.deposit, displayCurrency)}
-                        </td>
-                        <td className="logs-table__num">
-                          {formatDisplayMoneyFromString(row.balance, displayCurrency)}
-                        </td>
-                        <td className="logs-table__actions">
-                          <div className="logs-table__actions-inner">
-                            <button
-                              type="button"
-                              className="btn"
-                              onClick={() => startEditLog(row)}
-                              disabled={blockLogRowActions || (editingLogId != null && editingLogId !== row.id) || isEditingAsset}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-danger"
-                              onClick={() => setDeleteTarget(row)}
-                              disabled={blockLogRowActions || editingLogId != null || isEditingAsset}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ),
-                  )}
+                  {logs.map((row) => (
+                    <tr key={row.id}>
+                      <td>{formatLogPeriod(row.year, row.month)}</td>
+                      <td className="logs-table__num">
+                        {formatDisplayMoneyFromString(row.deposit, displayCurrency)}
+                      </td>
+                      <td className="logs-table__num">
+                        {formatDisplayMoneyFromString(row.balance, displayCurrency)}
+                      </td>
+                      <td className="logs-table__actions">
+                        <div className="logs-table__actions-inner">
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => startEditLog(row)}
+                            disabled={blockLogRowActions || isEditingAsset}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => setDeleteTarget(row)}
+                            disabled={blockLogRowActions || isEditingAsset}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
         </section>
-
-        <section className="card asset-detail-new-log-card">
-          <h2 className="card-title">New log</h2>
-          <form className="form" onSubmit={(ev) => void onSubmitNewLog(ev)}>
-            <div className="field-row field-row--period">
-              <label className="field">
-                <span>Year</span>
-                <select value={year} onChange={(ev) => setYear(Number(ev.target.value))} required disabled={newLogLocked}>
-                  {yearOptions.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Month</span>
-                <select value={month} onChange={(ev) => setMonth(Number(ev.target.value))} required disabled={newLogLocked}>
-                  {MONTH_OPTIONS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="field">
-              <span>Deposit</span>
-              <input
-                value={deposit}
-                onChange={(ev) => setDeposit(ev.target.value)}
-                inputMode="decimal"
-                placeholder="0"
-                autoComplete="off"
-                disabled={newLogLocked}
-              />
-            </label>
-            <label className="field">
-              <span>Balance</span>
-              <input
-                value={balance}
-                onChange={(ev) => setBalance(ev.target.value)}
-                inputMode="decimal"
-                placeholder="0"
-                autoComplete="off"
-                disabled={newLogLocked}
-              />
-            </label>
-            {newLogLocked && <p className="hint">Finish or cancel the row or asset edit before adding a log.</p>}
-            {formError != null && <p className="error">{formError}</p>}
-            <button type="submit" className="btn primary" disabled={saving || newLogLocked}>
-              {saving ? 'Saving…' : 'Save log'}
-            </button>
-          </form>
-        </section>
       </div>
+
+      <AssetEditLogModal
+        open={editingLogId != null}
+        onClose={cancelEditLog}
+        year={editYear}
+        month={editMonth}
+        deposit={editDeposit}
+        balance={editBalance}
+        onYearChange={setEditYear}
+        onMonthChange={setEditMonth}
+        onDepositChange={setEditDeposit}
+        onBalanceChange={setEditBalance}
+        yearOptions={editYearOptions}
+        monthOptions={MONTH_OPTIONS}
+        formError={editError}
+        fieldsDisabled={isEditingAsset || editAssetSaving || addLogModalOpen}
+        saving={editSaving}
+        onSubmit={onSaveLogEdit}
+      />
+
+      <AssetAddLogModal
+        open={addLogModalOpen}
+        onClose={closeAddLogModal}
+        year={year}
+        month={month}
+        deposit={deposit}
+        balance={balance}
+        onYearChange={setYear}
+        onMonthChange={setMonth}
+        onDepositChange={setDeposit}
+        onBalanceChange={setBalance}
+        yearOptions={yearOptions}
+        monthOptions={MONTH_OPTIONS}
+        formError={formError}
+        fieldsDisabled={newLogLocked}
+        saving={saving}
+        onSubmit={onSubmitNewLog}
+      />
 
       <ConfirmModal
         open={deleteLogModalOpen}

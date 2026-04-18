@@ -1,9 +1,12 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError, apiJson } from '../api/client'
 import { formatDbNumericForInput } from '../asset/formatDbNumericForInput'
+import { AllLogEditModal } from '../components/AllLogEditModal'
 import { BulkImportModal, type BulkDraftResponse } from '../components/BulkImportModal'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { CsvImportModal, type CsvImportResponse } from '../components/CsvImportModal'
+import { buildLogsCsvForExport, downloadCsvFile } from '../csv/logsCsv'
 import type { UserWithCurrency } from '../components/CurrencySettingsModal'
 import { Toast } from '../components/Toast'
 import { formatDisplayMoneyFromString } from '../currency/formatDisplayMoney'
@@ -63,11 +66,6 @@ function formatLogPeriodLong(year: number, month: number) {
   return `${label} ${year}`
 }
 
-function buildYearOptions(maxYear: number) {
-  const end = Math.max(2000, Math.min(2100, maxYear))
-  return Array.from({ length: end - 1999 + 1 }, (_, i) => 2000 + i)
-}
-
 type AssetFilterOption = { id: string; name: string; color: string; withdrawn: boolean }
 
 type BulkSubmitResponse = {
@@ -84,6 +82,23 @@ function bulkImportSuccessToast(res: BulkSubmitResponse): string {
   const f = res.failed.length
   const tail = f === 1 ? ' 1 could not be saved.' : ` ${f} could not be saved.`
   return base + tail
+}
+
+function formatCsvImportToast(res: CsvImportResponse): string {
+  const parts: string[] = []
+  if (res.createdLogs > 0) parts.push(res.createdLogs === 1 ? '1 log created' : `${res.createdLogs} logs created`)
+  if (res.updatedLogs > 0) parts.push(res.updatedLogs === 1 ? '1 log updated' : `${res.updatedLogs} logs updated`)
+  if (parts.length === 0) parts.push('No rows saved')
+  if (res.assetsCreated.length > 0)
+    parts.push(`new assets: ${res.assetsCreated.map((a) => a.name).join(', ')}`)
+  if (res.failed.length > 0) {
+    const sample = res.failed
+      .slice(0, 3)
+      .map((f) => `L${f.line}: ${f.detail}`)
+      .join('; ')
+    parts.push(`${res.failed.length} failed (${sample}${res.failed.length > 3 ? '…' : ''})`)
+  }
+  return parts.join(' · ')
 }
 
 export function AllLogsPage() {
@@ -103,15 +118,11 @@ export function AllLogsPage() {
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
-  const [editingLogId, setEditingLogId] = useState<string | null>(null)
-  const [editingAssetId, setEditingAssetId] = useState<string | null>(null)
-  const [editYear, setEditYear] = useState(2000)
-  const [editMonth, setEditMonth] = useState(1)
-  const [editDeposit, setEditDeposit] = useState('')
-  const [editBalance, setEditBalance] = useState('')
-  const [editError, setEditError] = useState<string | null>(null)
-  const [editSaving, setEditSaving] = useState(false)
+  const [editModalLog, setEditModalLog] = useState<AllLogRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AllLogRow | null>(null)
+  const [csvMenuOpen, setCsvMenuOpen] = useState(false)
+  const [csvImportOpen, setCsvImportOpen] = useState(false)
+  const csvMenuRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -150,7 +161,36 @@ export function AllLogsPage() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!csvMenuOpen) return
+    function onPointerDown(e: PointerEvent) {
+      const root = csvMenuRef.current
+      if (!root || !(e.target instanceof Node) || root.contains(e.target)) return
+      setCsvMenuOpen(false)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setCsvMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [csvMenuOpen])
+
   const clearToast = useCallback(() => setToastMessage(null), [])
+
+  function exportLogsCsv() {
+    const stamp = new Date().toISOString().slice(0, 10)
+    downloadCsvFile(`portfolio-logs-${stamp}.csv`, buildLogsCsvForExport(logs))
+    setCsvMenuOpen(false)
+  }
+
+  function openCsvImport() {
+    setCsvMenuOpen(false)
+    setCsvImportOpen(true)
+  }
 
   function closeBulkModal() {
     setBulkModalOpen(false)
@@ -271,68 +311,13 @@ export function AllLogsPage() {
     })
   }
 
-  function startEditLog(row: AllLogRow) {
-    setEditingLogId(row.id)
-    setEditingAssetId(row.assetId)
-    setEditYear(row.year)
-    setEditMonth(row.month)
-    setEditDeposit(formatDbNumericForInput(row.deposit))
-    setEditBalance(formatDbNumericForInput(row.balance))
-    setEditError(null)
-  }
-
-  function cancelEditLog() {
-    setEditingLogId(null)
-    setEditingAssetId(null)
-    setEditError(null)
-  }
-
-  async function onSaveLogEdit(e: FormEvent) {
-    e.preventDefault()
-    if (!editingLogId || !editingAssetId) return
-    setEditError(null)
-    const depositNum = Number(editDeposit)
-    const balanceNum = Number(editBalance)
-    if (!Number.isFinite(depositNum)) {
-      setEditError('Enter a valid deposit amount')
-      return
-    }
-    if (!Number.isFinite(balanceNum)) {
-      setEditError('Enter a valid balance')
-      return
-    }
-    setEditSaving(true)
-    try {
-      await apiJson<{ log: { id: string } }>(`/api/assets/${editingAssetId}/logs/${editingLogId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          year: editYear,
-          month: editMonth,
-          deposit: depositNum,
-          balance: balanceNum,
-        }),
-      })
-      cancelEditLog()
-      await refreshLogs()
-    } catch (err: unknown) {
-      if (err instanceof ApiError && err.status === 401) {
-        void navigate('/login', { replace: true })
-        return
-      }
-      if (err instanceof ApiError) setEditError(err.message)
-      else setEditError('Something went wrong')
-    } finally {
-      setEditSaving(false)
-    }
-  }
-
   async function performDeleteLog() {
     const target = deleteTarget
     if (!target) return
     try {
       await apiJson<{ ok: boolean }>(`/api/assets/${target.assetId}/logs/${target.id}`, { method: 'DELETE' })
       setDeleteTarget(null)
-      if (editingLogId === target.id) cancelEditLog()
+      if (editModalLog?.id === target.id) setEditModalLog(null)
       await refreshLogs()
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
@@ -345,13 +330,8 @@ export function AllLogsPage() {
     }
   }
 
-  const yearNow = new Date().getFullYear()
-  const endYear = Math.min(2100, yearNow + 1)
-  const editYearMax = Math.min(2100, Math.max(endYear, editYear))
-  const editYearOptions = buildYearOptions(editYearMax)
-
   const deleteLogModalOpen = deleteTarget != null
-  const blockLogRowActions = deleteLogModalOpen || editSaving || bulkSubmitting
+  const blockLogRowActions = deleteLogModalOpen || bulkSubmitting || editModalLog != null || csvImportOpen
 
   if (loadState === 'loading') return <main className="app">Loading logs…</main>
 
@@ -380,9 +360,40 @@ export function AllLogsPage() {
             Monthly entries across every asset, newest period first. Use badges to narrow by asset.
           </p>
         </div>
-        <button type="button" className="btn assets-bulk-trigger" onClick={() => void openBulkModal()}>
-          Bulk import current month
-        </button>
+        <div className="all-logs-heading-actions">
+          <button type="button" className="btn assets-bulk-trigger" onClick={() => void openBulkModal()}>
+            Bulk import current month
+          </button>
+          <div className="asset-detail-menu-wrap all-logs-csv-menu-wrap" ref={csvMenuRef}>
+            <button
+              type="button"
+              className="asset-detail-menu-trigger"
+              aria-label="CSV import and export"
+              aria-haspopup="menu"
+              aria-expanded={csvMenuOpen}
+              disabled={bulkSubmitting || csvImportOpen}
+              onClick={() => setCsvMenuOpen((o) => !o)}
+            >
+              <span className="asset-detail-menu-dots" aria-hidden>
+                &#8942;
+              </span>
+            </button>
+            {csvMenuOpen ? (
+              <ul className="asset-detail-menu all-logs-csv-menu" role="menu">
+                <li role="none">
+                  <button type="button" role="menuitem" className="asset-detail-menu-item" onClick={exportLogsCsv}>
+                    Export CSV
+                  </button>
+                </li>
+                <li role="none">
+                  <button type="button" role="menuitem" className="asset-detail-menu-item" onClick={openCsvImport}>
+                    Import CSV…
+                  </button>
+                </li>
+              </ul>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <Toast message={toastMessage} onRequestClear={clearToast} />
@@ -448,114 +459,42 @@ export function AllLogsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLogs.map((row) =>
-                      editingLogId === row.id ? (
-                        <tr key={row.id} className="logs-table__row--editing">
-                          <td colSpan={5}>
-                            <form className="log-row-edit" onSubmit={(ev) => void onSaveLogEdit(ev)}>
-                              <p className="muted log-row-edit-asset-label">
-                                {row.assetName}
-                                {row.withdrawn ? ' · withdrawn' : ''}
-                              </p>
-                              <div className="field-row field-row--period">
-                                <label className="field">
-                                  <span>Year</span>
-                                  <select
-                                    value={editYear}
-                                    onChange={(ev) => setEditYear(Number(ev.target.value))}
-                                    required
-                                    disabled={editSaving}
-                                  >
-                                    {editYearOptions.map((y) => (
-                                      <option key={y} value={y}>
-                                        {y}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                                <label className="field">
-                                  <span>Month</span>
-                                  <select
-                                    value={editMonth}
-                                    onChange={(ev) => setEditMonth(Number(ev.target.value))}
-                                    required
-                                    disabled={editSaving}
-                                  >
-                                    {MONTH_OPTIONS.map((m) => (
-                                      <option key={m.value} value={m.value}>
-                                        {m.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
-                              </div>
-                              <label className="field">
-                                <span>Deposit</span>
-                                <input
-                                  value={editDeposit}
-                                  onChange={(ev) => setEditDeposit(ev.target.value)}
-                                  inputMode="decimal"
-                                  disabled={editSaving}
-                                />
-                              </label>
-                              <label className="field">
-                                <span>Balance</span>
-                                <input
-                                  value={editBalance}
-                                  onChange={(ev) => setEditBalance(ev.target.value)}
-                                  inputMode="decimal"
-                                  disabled={editSaving}
-                                />
-                              </label>
-                              {editError != null && <p className="error">{editError}</p>}
-                              <div className="log-row-edit-actions">
-                                <button type="button" className="btn" onClick={cancelEditLog} disabled={editSaving}>
-                                  Cancel
-                                </button>
-                                <button type="submit" className="btn primary" disabled={editSaving}>
-                                  {editSaving ? 'Saving…' : 'Save'}
-                                </button>
-                              </div>
-                            </form>
-                          </td>
-                        </tr>
-                      ) : (
-                        <tr key={row.id} className={row.withdrawn ? 'all-logs-table__row--withdrawn' : undefined}>
-                          <td>
-                            <Link
-                              to={`/assets/${row.assetId}`}
-                              className={`all-logs-asset-link${row.withdrawn ? ' all-logs-asset-link--withdrawn' : ''}`}
+                    {filteredLogs.map((row) => (
+                      <tr key={row.id} className={row.withdrawn ? 'all-logs-table__row--withdrawn' : undefined}>
+                        <td>
+                          <Link
+                            to={`/assets/${row.assetId}`}
+                            className={`all-logs-asset-link${row.withdrawn ? ' all-logs-asset-link--withdrawn' : ''}`}
+                          >
+                            <span className="all-logs-asset-swatch" style={{ backgroundColor: row.assetColor }} aria-hidden />
+                            {row.assetName}
+                          </Link>
+                        </td>
+                        <td>{formatLogPeriodShort(row.year, row.month)}</td>
+                        <td className="logs-table__num">{formatDisplayMoneyFromString(row.deposit, displayCurrency)}</td>
+                        <td className="logs-table__num">{formatDisplayMoneyFromString(row.balance, displayCurrency)}</td>
+                        <td className="logs-table__actions">
+                          <div className="logs-table__actions-inner">
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() => setEditModalLog(row)}
+                              disabled={blockLogRowActions}
                             >
-                              <span className="all-logs-asset-swatch" style={{ backgroundColor: row.assetColor }} aria-hidden />
-                              {row.assetName}
-                            </Link>
-                          </td>
-                          <td>{formatLogPeriodShort(row.year, row.month)}</td>
-                          <td className="logs-table__num">{formatDisplayMoneyFromString(row.deposit, displayCurrency)}</td>
-                          <td className="logs-table__num">{formatDisplayMoneyFromString(row.balance, displayCurrency)}</td>
-                          <td className="logs-table__actions">
-                            <div className="logs-table__actions-inner">
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() => startEditLog(row)}
-                                disabled={blockLogRowActions || (editingLogId != null && editingLogId !== row.id)}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-danger"
-                                onClick={() => setDeleteTarget(row)}
-                                disabled={blockLogRowActions || editingLogId != null}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ),
-                    )}
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={() => setDeleteTarget(row)}
+                              disabled={blockLogRowActions}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -563,6 +502,19 @@ export function AllLogsPage() {
           </section>
         </>
       )}
+
+      <CsvImportModal
+        open={csvImportOpen}
+        onClose={() => setCsvImportOpen(false)}
+        onComplete={(res) => {
+          setToastMessage(formatCsvImportToast(res))
+          setCsvImportOpen(false)
+          void refreshLogs()
+        }}
+        navigate={navigate}
+      />
+
+      <AllLogEditModal log={editModalLog} onClose={() => setEditModalLog(null)} onSaved={refreshLogs} navigate={navigate} />
 
       <ConfirmModal
         open={deleteLogModalOpen}

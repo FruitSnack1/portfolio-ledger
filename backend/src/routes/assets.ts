@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { assetColorSchema } from '../asset/assetColorPalette.js'
+import { computeAssetListSummaryForLogs } from '../asset/assetListSummary.js'
 import { requireUserId } from '../auth/requireUserId.js'
 import type { Db } from '../db/client.js'
-import { assets } from '../db/schema.js'
+import { assetLogs, assets } from '../db/schema.js'
 
 const createAssetBodySchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -34,6 +35,13 @@ const assetReturnColumns = {
   withdrawn: assets.withdrawn,
 }
 
+const emptyAssetListSummary = {
+  hasLogs: false,
+  currentBalance: null,
+  sumDeposits: 0,
+  percentPL: null,
+} as const
+
 function isMissingAssetsTable(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   if (!('message' in error)) return false
@@ -53,7 +61,34 @@ export async function registerAssetRoutes(app: FastifyInstance, db: Db) {
         .where(eq(assets.userId, userId))
         .orderBy(desc(assets.createdAt))
 
-      return { assets: rows }
+      const assetIds = rows.map((r) => r.id)
+      const logsByAssetId = new Map<string, { year: number; month: number; deposit: string; balance: string }[]>()
+      if (assetIds.length > 0) {
+        const logRows = await db
+          .select({
+            assetId: assetLogs.assetId,
+            year: assetLogs.year,
+            month: assetLogs.month,
+            deposit: assetLogs.deposit,
+            balance: assetLogs.balance,
+          })
+          .from(assetLogs)
+          .where(inArray(assetLogs.assetId, assetIds))
+        for (const log of logRows) {
+          const deposit = String(log.deposit).trim()
+          const balance = String(log.balance).trim()
+          const list = logsByAssetId.get(log.assetId) ?? []
+          list.push({ year: log.year, month: log.month, deposit, balance })
+          logsByAssetId.set(log.assetId, list)
+        }
+      }
+
+      const assetsWithSummary = rows.map((asset) => ({
+        ...asset,
+        summary: computeAssetListSummaryForLogs(logsByAssetId.get(asset.id) ?? []),
+      }))
+
+      return { assets: assetsWithSummary }
     } catch (error: unknown) {
       request.log.error(error)
       if (isMissingAssetsTable(error))
@@ -83,7 +118,7 @@ export async function registerAssetRoutes(app: FastifyInstance, db: Db) {
 
       if (!row) return reply.status(500).send({ error: 'Failed to create asset' })
 
-      return reply.status(201).send({ asset: row })
+      return reply.status(201).send({ asset: { ...row, summary: { ...emptyAssetListSummary } } })
     } catch (error: unknown) {
       request.log.error(error)
       if (isMissingAssetsTable(error))
