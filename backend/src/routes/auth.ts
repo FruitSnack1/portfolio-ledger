@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { hashPassword, verifyPassword } from '../auth/password.js'
+import { isSupportedCurrencyCode } from '../currency/supportedCurrencies.js'
 import type { Db } from '../db/client.js'
 import { users } from '../db/schema.js'
 
@@ -15,6 +16,14 @@ const credentialsSchema = z.object({
 function parseCredentials(body: unknown) {
   return credentialsSchema.safeParse(body)
 }
+
+const patchMeBodySchema = z.object({
+  displayCurrency: z
+    .string()
+    .length(3)
+    .transform((s) => s.toUpperCase())
+    .refine(isSupportedCurrencyCode, { message: 'Unsupported currency' }),
+})
 
 function isUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
@@ -62,13 +71,17 @@ function createRegisterHandler(db: Db) {
       const [row] = await db
         .insert(users)
         .values({ email, passwordHash })
-        .returning({ id: users.id, email: users.email })
+        .returning({
+          id: users.id,
+          email: users.email,
+          displayCurrency: users.displayCurrency,
+        })
 
       if (!row) throw new Error('Failed to create user')
 
       const token = await reply.jwtSign({ sub: row.id, email: row.email })
       setAuthCookie(reply, token, isSecureRequest(request))
-      return reply.status(201).send({ user: { id: row.id, email: row.email } })
+      return reply.status(201).send({ user: row })
     } catch (error: unknown) {
       if (isUniqueViolation(error)) return reply.status(409).send({ error: 'Email already registered' })
       throw error
@@ -83,7 +96,12 @@ function createLoginHandler(db: Db) {
 
     const email = normalizeEmail(parsed.data.email)
     const [row] = await db
-      .select({ id: users.id, email: users.email, passwordHash: users.passwordHash })
+      .select({
+        id: users.id,
+        email: users.email,
+        displayCurrency: users.displayCurrency,
+        passwordHash: users.passwordHash,
+      })
       .from(users)
       .where(eq(users.email, email))
       .limit(1)
@@ -95,7 +113,9 @@ function createLoginHandler(db: Db) {
 
     const token = await reply.jwtSign({ sub: row.id, email: row.email })
     setAuthCookie(reply, token, isSecureRequest(request))
-    return { user: { id: row.id, email: row.email } }
+    return {
+      user: { id: row.id, email: row.email, displayCurrency: row.displayCurrency },
+    }
   }
 }
 
@@ -106,7 +126,7 @@ function createLogoutHandler() {
   }
 }
 
-function createMeHandler() {
+function createMeHandler(db: Db) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       await request.jwtVerify({ onlyCookie: true })
@@ -115,7 +135,47 @@ function createMeHandler() {
     }
 
     const payload = request.user
-    return { user: { id: payload.sub, email: payload.email } }
+    const [row] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayCurrency: users.displayCurrency,
+      })
+      .from(users)
+      .where(eq(users.id, payload.sub))
+      .limit(1)
+
+    if (!row) return reply.status(401).send({ error: 'Unauthorized' })
+
+    return { user: row }
+  }
+}
+
+function createPatchMeHandler(db: Db) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await request.jwtVerify({ onlyCookie: true })
+    } catch {
+      return reply.status(401).send({ error: 'Unauthorized' })
+    }
+
+    const parsed = patchMeBodySchema.safeParse(request.body)
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid display currency' })
+
+    const payload = request.user
+    const [row] = await db
+      .update(users)
+      .set({ displayCurrency: parsed.data.displayCurrency })
+      .where(eq(users.id, payload.sub))
+      .returning({
+        id: users.id,
+        email: users.email,
+        displayCurrency: users.displayCurrency,
+      })
+
+    if (!row) return reply.status(404).send({ error: 'User not found' })
+
+    return { user: row }
   }
 }
 
@@ -123,5 +183,6 @@ export async function registerAuthRoutes(app: FastifyInstance, db: Db) {
   app.post('/register', createRegisterHandler(db))
   app.post('/login', createLoginHandler(db))
   app.post('/logout', createLogoutHandler())
-  app.get('/me', createMeHandler())
+  app.get('/me', createMeHandler(db))
+  app.patch('/me', createPatchMeHandler(db))
 }

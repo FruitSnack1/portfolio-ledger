@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, apiJson } from '../api/client'
+import { CurrencySettingsModal, type UserWithCurrency } from '../components/CurrencySettingsModal'
 
-type MeResponse = { user: { id: string; email: string } }
+type MeResponse = { user: UserWithCurrency }
 
 export function HomePage() {
-  const [user, setUser] = useState<MeResponse['user'] | null>(null)
+  const [user, setUser] = useState<UserWithCurrency | null>(null)
   const [loading, setLoading] = useState(true)
+  const [currencyModalOpen, setCurrencyModalOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -25,6 +27,14 @@ export function HomePage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setCurrencyModalOpen(false)
+      return
+    }
+    if (user.displayCurrency == null) setCurrencyModalOpen(true)
+  }, [user])
 
   async function logout() {
     await apiJson<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
@@ -52,10 +62,24 @@ export function HomePage() {
       <p className="muted">
         Logged in as <strong>{user.email}</strong>
       </p>
+      <p className="settings-row">
+        <span className="muted">Display currency:</span>{' '}
+        <button type="button" className="link-btn" onClick={() => setCurrencyModalOpen(true)}>
+          {user.displayCurrency ?? 'Not set — tap to choose'}
+        </button>
+      </p>
       <button type="button" className="btn" onClick={() => void logout()}>
         Log out
       </button>
       <p className="muted small">Asset and log CRUD will go here next.</p>
+
+      <CurrencySettingsModal
+        open={currencyModalOpen}
+        mandatory={user.displayCurrency == null}
+        displayCurrency={user.displayCurrency}
+        onClose={() => setCurrencyModalOpen(false)}
+        onSaved={(next) => setUser(next)}
+      />
     </main>
   )
 }
