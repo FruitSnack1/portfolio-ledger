@@ -68,10 +68,15 @@ export function HomePage() {
           {user.displayCurrency ?? 'Not set — tap to choose'}
         </button>
       </p>
+      <p className="settings-row">
+        <Link to="/assets" className="link-btn">
+          Manage assets
+        </Link>
+      </p>
       <button type="button" className="btn" onClick={() => void logout()}>
         Log out
       </button>
-      <p className="muted small">Asset and log CRUD will go here next.</p>
+      <p className="muted small">Monthly logs and dashboard will follow.</p>
 
       <CurrencySettingsModal
         open={currencyModalOpen}

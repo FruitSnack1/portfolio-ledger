@@ -11,6 +11,7 @@ export function RootLayout() {
         <div className="topbar-right">
           <ThemeToggle />
           <nav className="nav">
+            <Link to="/assets">Assets</Link>
             <Link to="/login">Log in</Link>
             <Link to="/register">Register</Link>
           </nav>

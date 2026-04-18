@@ -15,6 +15,13 @@
       "when": 1776504037532,
       "tag": "0001_add_display_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776504303551,
+      "tag": "0002_add_assets",
+      "breakpoints": true
     }
   ]
 }
