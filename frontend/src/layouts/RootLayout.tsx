@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router-dom'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 export function RootLayout() {
   return (
@@ -7,10 +8,13 @@ export function RootLayout() {
         <Link to="/" className="brand">
           Portfolio Ledger
         </Link>
-        <nav className="nav">
-          <Link to="/login">Log in</Link>
-          <Link to="/register">Register</Link>
-        </nav>
+        <div className="topbar-right">
+          <ThemeToggle />
+          <nav className="nav">
+            <Link to="/login">Log in</Link>
+            <Link to="/register">Register</Link>
+          </nav>
+        </div>
       </header>
       <Outlet />
     </div>
