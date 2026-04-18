@@ -5,13 +5,23 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "fastify": "^5.2.2"
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^10.1.0",
+    "@fastify/jwt": "^9.1.0",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.42.0",
+    "fastify": "^5.2.2",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
+    "drizzle-kit": "^0.31.1",
     "tsx": "^4.19.3",
     "typescript": "~5.8.3"
   }

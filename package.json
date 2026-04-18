@@ -3,6 +3,8 @@
   "private": true,
   "workspaces": ["frontend", "backend"],
   "scripts": {
+    "db:up": "docker compose up -d",
+    "predev": "node --input-type=module -e \"import { access } from 'node:fs/promises'; import { join } from 'node:path'; const paths = [join('node_modules','@fastify','cookie','package.json'), join('node_modules','react-router-dom','package.json')]; for (const p of paths) { try { await access(p) } catch { console.error('Missing dependency:', p, '\\nFrom the repo root run: npm install'); process.exit(1) } }\"",
     "dev": "concurrently -n fe,be -c cyan,magenta \"npm run dev -w frontend\" \"npm run dev -w backend\"",
     "build": "npm run build -w backend && npm run build -w frontend"
   },

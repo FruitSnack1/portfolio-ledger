@@ -1,9 +1,16 @@
+import { loadEnv } from './config/env.js'
+import { connectDb } from './db/client.js'
+import { runMigrations } from './db/migrate.js'
 import { buildApp } from './app.js'
 
-const port = Number(process.env.PORT ?? 3001)
-const host = process.env.HOST ?? '0.0.0.0'
+const env = loadEnv()
 
-const app = buildApp()
+await runMigrations(env.DATABASE_URL)
+const db = connectDb(env.DATABASE_URL)
+const app = await buildApp(env, db)
+
+const port = env.PORT
+const host = env.HOST
 
 try {
   await app.listen({ port, host })
