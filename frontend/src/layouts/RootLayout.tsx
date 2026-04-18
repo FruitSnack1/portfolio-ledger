@@ -65,6 +65,7 @@ export function RootLayout() {
             <Link to="/">Home</Link>
             <Link to="/assets">Assets</Link>
             <Link to="/logs">Logs</Link>
+            {!sessionLoading && user != null ? <Link to="/settings">Settings</Link> : null}
             {!sessionLoading && user == null ? (
               <Link to="/login" className="nav-sign-in">
                 Sign in

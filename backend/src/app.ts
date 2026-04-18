@@ -9,6 +9,7 @@ import { registerAssetLogRoutes } from './routes/assetLogs.js'
 import { registerAssetRoutes } from './routes/assets.js'
 import { registerAuthRoutes } from './routes/auth.js'
 import { registerDashboardRoutes } from './routes/dashboard.js'
+import { registerSettingsRoutes } from './routes/settings.js'
 
 export async function buildApp(env: Env, db: Db) {
   const app = Fastify({ logger: true })
@@ -44,6 +45,10 @@ export async function buildApp(env: Env, db: Db) {
   await app.register(async (instance) => {
     await registerAllLogsRoutes(instance, db)
   }, { prefix: '/api/logs' })
+
+  await app.register(async (instance) => {
+    await registerSettingsRoutes(instance, db)
+  }, { prefix: '/api/settings' })
 
   return app
 }

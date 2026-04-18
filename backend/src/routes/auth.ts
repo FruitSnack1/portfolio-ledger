@@ -26,6 +26,11 @@ const patchMeBodySchema = z.object({
     .refine(isSupportedCurrencyCode, { message: 'Unsupported currency' }),
 })
 
+const changePasswordBodySchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(8).max(128),
+})
+
 function isUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   if (!('code' in error)) return false
@@ -172,10 +177,40 @@ function createPatchMeHandler(db: Db) {
   }
 }
 
+function createChangePasswordHandler(db: Db) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = await requireUserId(request, reply)
+    if (!userId) return
+
+    const parsed = changePasswordBodySchema.safeParse(request.body)
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid password request' })
+
+    const [row] = await db
+      .select({ passwordHash: users.passwordHash })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    if (!row) return reply.status(401).send({ error: 'Unauthorized' })
+
+    if (!verifyPassword(parsed.data.currentPassword, row.passwordHash))
+      return reply.status(401).send({ error: 'Current password is incorrect' })
+
+    if (verifyPassword(parsed.data.newPassword, row.passwordHash))
+      return reply.status(400).send({ error: 'New password must be different from the current one' })
+
+    const passwordHash = hashPassword(parsed.data.newPassword)
+    await db.update(users).set({ passwordHash }).where(eq(users.id, userId))
+
+    return { ok: true }
+  }
+}
+
 export async function registerAuthRoutes(app: FastifyInstance, db: Db) {
   app.post('/register', createRegisterHandler(db))
   app.post('/login', createLoginHandler(db))
   app.post('/logout', createLogoutHandler())
   app.get('/me', createMeHandler(db))
   app.patch('/me', createPatchMeHandler(db))
+  app.post('/change-password', createChangePasswordHandler(db))
 }

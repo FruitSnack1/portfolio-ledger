@@ -15,6 +15,15 @@ export function HomePage() {
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null)
   const [dashState, setDashState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
   const [dashError, setDashError] = useState<string | null>(null)
+  const [dashboardRev, setDashboardRev] = useState(0)
+
+  useEffect(() => {
+    function onPurge() {
+      setDashboardRev((n) => n + 1)
+    }
+    window.addEventListener('portfolio-purge', onPurge)
+    return () => window.removeEventListener('portfolio-purge', onPurge)
+  }, [])
 
   useEffect(() => {
     function onPortfolioLogout() {
@@ -73,7 +82,7 @@ export function HomePage() {
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [user, dashboardRev])
 
   useEffect(() => {
     if (!user) {

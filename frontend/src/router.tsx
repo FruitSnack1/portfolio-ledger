@@ -6,6 +6,7 @@ import { RootLayout } from './layouts/RootLayout'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 function LegacyAssetLogsRedirect() {
   const { assetId } = useParams<{ assetId: string }>()
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: 'assets/:assetId/logs', element: <LegacyAssetLogsRedirect /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
+      { path: 'settings', element: <SettingsPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

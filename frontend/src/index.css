@@ -208,8 +208,100 @@ html[data-theme='dark'] .theme-segment-btn[aria-pressed='true'] {
 
 /** Asset list + single-asset views: wider than default `.app`, but not full viewport. */
 .app.assets-page,
-.app.asset-detail-page {
+.app.asset-detail-page,
+.app.settings-page {
   max-width: 52rem;
+}
+
+.settings-page {
+  --settings-space: 1.25rem;
+  --settings-space-lg: 1.5rem;
+}
+
+.settings-page-header {
+  margin-bottom: var(--settings-space-lg);
+}
+
+.settings-page-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.75rem;
+}
+
+.settings-page .settings-card .btn {
+  padding: 0.5rem 1.05rem;
+  font-size: 0.875rem;
+  border-radius: 0.45rem;
+}
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-space-lg);
+}
+
+.settings-page .settings-stack > .settings-card {
+  margin-top: 0;
+}
+
+.settings-page .settings-card {
+  padding: var(--settings-space-lg) 1.35rem;
+  box-sizing: border-box;
+}
+
+.settings-page .settings-card .card-title {
+  margin: 0 0 var(--settings-space);
+}
+
+.settings-page .settings-card-lead {
+  margin: 0 0 var(--settings-space);
+  font-size: 0.875rem;
+}
+
+.settings-page .settings-card .form {
+  margin-top: 0;
+  gap: var(--settings-space);
+}
+
+.settings-currency-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.settings-currency-form .field {
+  max-width: 22rem;
+  width: 100%;
+}
+
+.settings-password-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.settings-password-form .field {
+  max-width: 22rem;
+  width: 100%;
+}
+
+.settings-currency-save-btn,
+.settings-password-save-btn {
+  box-sizing: border-box;
+  width: fit-content;
+  min-width: 12rem;
+  margin-top: var(--settings-space);
+  margin-bottom: 0;
+}
+
+.settings-theme-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-card--danger-zone .btn-danger {
+  margin-top: 0;
 }
 
 .app.dashboard-page {
