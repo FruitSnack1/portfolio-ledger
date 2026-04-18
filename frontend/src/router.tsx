@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate, useParams } from 'react-router-dom'
+import { AllLogsPage } from './pages/AllLogsPage'
 import { AssetDetailPage } from './pages/AssetDetailPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { RootLayout } from './layouts/RootLayout'
@@ -18,6 +19,7 @@ export const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'logs', element: <AllLogsPage /> },
       { path: 'assets', element: <AssetsPage /> },
       { path: 'assets/:assetId', element: <AssetDetailPage /> },
       { path: 'assets/:assetId/logs', element: <LegacyAssetLogsRedirect /> },

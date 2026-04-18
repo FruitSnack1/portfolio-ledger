@@ -33,6 +33,45 @@ export type DashboardAssetRow = {
   monthlyPercentPoints: DashboardTimePoint[]
 }
 
+export type DashboardDepositStackSlice = {
+  assetId: string
+  name: string
+  color: string
+  deposit: number
+}
+
+export type DashboardDepositsByMonth = {
+  time: string
+  total: number
+  byAsset: DashboardDepositStackSlice[]
+}
+
+export type DashboardPlOverTimePoint = {
+  time: string
+  plMoney: number
+  plPercent: number | null
+}
+
+export type DashboardHeatmapRow = {
+  assetId: string
+  name: string
+  color: string
+  /** Same order as heatmapMonthLabels */
+  pctValues: (number | null)[]
+}
+
+export type DashboardDataHealthAsset = {
+  assetId: string
+  name: string
+  color: string
+  hasLogs: boolean
+  firstLogPeriod: string | null
+  latestLogPeriod: string | null
+  missingMonthsInRange: number
+  /** Up to 6 ISO month labels for UI */
+  missingSample: string[]
+}
+
 export type DashboardPayload = {
   totals: {
     totalBalance: number
@@ -41,8 +80,15 @@ export type DashboardPayload = {
     plPercent: number | null
   }
   balanceOverTime: DashboardTimePoint[]
+  cumulativeDepositsOverTime: DashboardTimePoint[]
+  portfolioMonthlyReturnPercent: DashboardTimePoint[]
+  depositsByMonth: DashboardDepositsByMonth[]
+  plOverTime: DashboardPlOverTimePoint[]
+  heatmapMonthLabels: string[]
+  heatmapRows: DashboardHeatmapRow[]
   distribution: DashboardAssetSlice[]
   assets: DashboardAssetRow[]
+  dataHealth: DashboardDataHealthAsset[]
 }
 
 function parseMoney(raw: string): number {
@@ -73,6 +119,40 @@ function carriedBalanceAtEndOfMonth(logsAsc: DashboardLogInput[], year: number, 
   }
   if (!any) return 0
   return last
+}
+
+function depositInMonth(logsAsc: DashboardLogInput[], year: number, month: number): number {
+  for (const row of logsAsc) if (row.year === year && row.month === month) return parseMoney(row.deposit)
+  return 0
+}
+
+/** Month-over-month % return for one asset’s log row at (year, month), or null if no row. */
+function monthlyPctForAssetMonth(logsAsc: DashboardLogInput[], year: number, month: number): number | null {
+  const idx = logsAsc.findIndex((r) => r.year === year && r.month === month)
+  if (idx < 0) return null
+  const row = logsAsc[idx]
+  const currB = parseMoney(row.balance)
+  const dep = parseMoney(row.deposit)
+  const prevB = idx === 0 ? 0 : parseMoney(logsAsc[idx - 1].balance)
+  const startBase = prevB + dep
+  if (!(startBase > 0)) return null
+  const moneyPL = currB - prevB - dep
+  return (moneyPL / startBase) * 100
+}
+
+function missingMonthsInLoggedRange(logsAsc: DashboardLogInput[]): string[] {
+  if (logsAsc.length === 0) return []
+  const mm = minMaxPeriod(logsAsc)
+  if (mm == null) return []
+  const all = enumerateMonthsInclusive(mm.min, mm.max)
+  const have = new Set<string>()
+  for (const r of logsAsc) have.add(`${r.year}-${r.month}`)
+  const missing: string[] = []
+  for (const p of all) {
+    if (have.has(`${p.year}-${p.month}`)) continue
+    missing.push(periodToTime(p.year, p.month))
+  }
+  return missing
 }
 
 function computeAssetMetrics(logs: DashboardLogInput[]): {
@@ -197,17 +277,101 @@ export function buildDashboard(assets: readonly DashboardAssetInput[], logs: rea
   const allLogs = [...logs]
   const mm = minMaxPeriod(allLogs)
   const balanceOverTime: DashboardTimePoint[] = []
+  const cumulativeDepositsOverTime: DashboardTimePoint[] = []
+  const portfolioMonthlyReturnPercent: DashboardTimePoint[] = []
+  const depositsByMonth: DashboardDepositsByMonth[] = []
+  const plOverTime: DashboardPlOverTimePoint[] = []
+  const heatmapMonthLabels: string[] = []
+  const heatmapRows: DashboardHeatmapRow[] = []
+
   if (mm != null) {
     const months = enumerateMonthsInclusive(mm.min, mm.max)
+    const beforeFirst =
+      mm.min.month === 1 ? { year: mm.min.year - 1, month: 12 } : { year: mm.min.year, month: mm.min.month - 1 }
+
+    let prevPortfolioEnd = 0
+    for (const a of assets) {
+      const lg = sortLogsAsc(byAsset.get(a.id) ?? [])
+      prevPortfolioEnd += carriedBalanceAtEndOfMonth(lg, beforeFirst.year, beforeFirst.month)
+    }
+
+    let cumDeposits = 0
     for (const { year, month } of months) {
-      let sum = 0
+      const t = periodToTime(year, month)
+      heatmapMonthLabels.push(t)
+
+      let currPortfolioEnd = 0
+      let depositsThisMonth = 0
+      const stackSlices: DashboardDepositStackSlice[] = []
       for (const a of assets) {
         const lg = sortLogsAsc(byAsset.get(a.id) ?? [])
-        sum += carriedBalanceAtEndOfMonth(lg, year, month)
+        const d = depositInMonth(lg, year, month)
+        depositsThisMonth += d
+        if (d !== 0) stackSlices.push({ assetId: a.id, name: a.name, color: a.color, deposit: d })
+        currPortfolioEnd += carriedBalanceAtEndOfMonth(lg, year, month)
       }
-      balanceOverTime.push({ time: periodToTime(year, month), value: sum })
+
+      cumDeposits += depositsThisMonth
+      cumulativeDepositsOverTime.push({ time: t, value: cumDeposits })
+      balanceOverTime.push({ time: t, value: currPortfolioEnd })
+
+      const moneyPL = currPortfolioEnd - prevPortfolioEnd - depositsThisMonth
+      const startBase = prevPortfolioEnd + depositsThisMonth
+      const pct = startBase > 0 ? (moneyPL / startBase) * 100 : 0
+      portfolioMonthlyReturnPercent.push({ time: t, value: pct })
+
+      depositsByMonth.push({ time: t, total: depositsThisMonth, byAsset: stackSlices })
+      const plMoneyNow = currPortfolioEnd - cumDeposits
+      const plPercentNow = cumDeposits > 0 ? (plMoneyNow / cumDeposits) * 100 : null
+      plOverTime.push({ time: t, plMoney: plMoneyNow, plPercent: plPercentNow })
+
+      prevPortfolioEnd = currPortfolioEnd
+    }
+
+    for (const a of assets) {
+      const lg = sortLogsAsc(byAsset.get(a.id) ?? [])
+      const pctValues = months.map(({ year, month }) => monthlyPctForAssetMonth(lg, year, month))
+      heatmapRows.push({ assetId: a.id, name: a.name, color: a.color, pctValues })
     }
   }
+
+  const dataHealth: DashboardDataHealthAsset[] = assets.map((a) => {
+    const lg = sortLogsAsc(byAsset.get(a.id) ?? [])
+    if (lg.length === 0)
+      return {
+        assetId: a.id,
+        name: a.name,
+        color: a.color,
+        hasLogs: false,
+        firstLogPeriod: null,
+        latestLogPeriod: null,
+        missingMonthsInRange: 0,
+        missingSample: [],
+      }
+    const bounds = minMaxPeriod(lg)
+    if (bounds == null)
+      return {
+        assetId: a.id,
+        name: a.name,
+        color: a.color,
+        hasLogs: false,
+        firstLogPeriod: null,
+        latestLogPeriod: null,
+        missingMonthsInRange: 0,
+        missingSample: [],
+      }
+    const missing = missingMonthsInLoggedRange(lg)
+    return {
+      assetId: a.id,
+      name: a.name,
+      color: a.color,
+      hasLogs: true,
+      firstLogPeriod: periodToTime(bounds.min.year, bounds.min.month),
+      latestLogPeriod: periodToTime(bounds.max.year, bounds.max.month),
+      missingMonthsInRange: missing.length,
+      missingSample: missing.slice(0, 6),
+    }
+  })
 
   const distTotal = assetRows.reduce((s, r) => s + Math.max(0, r.latestBalance), 0)
   const distribution: DashboardAssetSlice[] = assetRows.map((r) => ({
@@ -226,7 +390,14 @@ export function buildDashboard(assets: readonly DashboardAssetInput[], logs: rea
       plPercent,
     },
     balanceOverTime,
+    cumulativeDepositsOverTime,
+    portfolioMonthlyReturnPercent,
+    depositsByMonth,
+    plOverTime,
+    heatmapMonthLabels,
+    heatmapRows,
     distribution,
     assets: assetRows,
+    dataHealth,
   }
 }
