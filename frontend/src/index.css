@@ -308,6 +308,14 @@ html[data-theme='dark'] .modal-panel {
   cursor: not-allowed;
 }
 
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
 .btn.primary {
   background: var(--primary-bg);
   color: var(--primary-text);
@@ -506,4 +514,106 @@ html[data-theme='dark'] .color-preset:hover {
 
 .asset-date {
   font-size: 0.8125rem;
+}
+
+.asset-logs-page {
+  max-width: 52rem;
+}
+
+.asset-logs-title-swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  margin-right: 0.5rem;
+  vertical-align: -0.15em;
+  border: 1px solid var(--border-input);
+}
+
+.asset-logs-layout {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .asset-logs-layout {
+    grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.field-row--period .field {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.field-row--period select {
+  width: 100%;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+}
+
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.logs-table th,
+.logs-table td {
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.logs-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.logs-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.logs-table__actions {
+  text-align: right;
+  vertical-align: middle;
+}
+
+.logs-table__actions-inner {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.logs-table__row--editing td {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  background: var(--bg-surface);
+}
+
+.log-row-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 22rem;
+}
+
+.log-row-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }

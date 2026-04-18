@@ -4,6 +4,7 @@ import jwt from '@fastify/jwt'
 import Fastify from 'fastify'
 import type { Env } from './config/env.js'
 import type { Db } from './db/client.js'
+import { registerAssetLogRoutes } from './routes/assetLogs.js'
 import { registerAssetRoutes } from './routes/assets.js'
 import { registerAuthRoutes } from './routes/auth.js'
 
@@ -30,6 +31,7 @@ export async function buildApp(env: Env, db: Db) {
   }, { prefix: '/api/auth' })
 
   await app.register(async (instance) => {
+    await registerAssetLogRoutes(instance, db)
     await registerAssetRoutes(instance, db)
   }, { prefix: '/api/assets' })
 

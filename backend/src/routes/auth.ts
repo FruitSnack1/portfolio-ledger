@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { requireUserId } from '../auth/requireUserId.js'
 import { hashPassword, verifyPassword } from '../auth/password.js'
 import { isSupportedCurrencyCode } from '../currency/supportedCurrencies.js'
 import type { Db } from '../db/client.js'
@@ -128,13 +129,9 @@ function createLogoutHandler() {
 
 function createMeHandler(db: Db) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      await request.jwtVerify({ onlyCookie: true })
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' })
-    }
+    const userId = await requireUserId(request, reply)
+    if (!userId) return
 
-    const payload = request.user
     const [row] = await db
       .select({
         id: users.id,
@@ -142,7 +139,7 @@ function createMeHandler(db: Db) {
         displayCurrency: users.displayCurrency,
       })
       .from(users)
-      .where(eq(users.id, payload.sub))
+      .where(eq(users.id, userId))
       .limit(1)
 
     if (!row) return reply.status(401).send({ error: 'Unauthorized' })
@@ -153,20 +150,16 @@ function createMeHandler(db: Db) {
 
 function createPatchMeHandler(db: Db) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      await request.jwtVerify({ onlyCookie: true })
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' })
-    }
+    const userId = await requireUserId(request, reply)
+    if (!userId) return
 
     const parsed = patchMeBodySchema.safeParse(request.body)
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid display currency' })
 
-    const payload = request.user
     const [row] = await db
       .update(users)
       .set({ displayCurrency: parsed.data.displayCurrency })
-      .where(eq(users.id, payload.sub))
+      .where(eq(users.id, userId))
       .returning({
         id: users.id,
         email: users.email,

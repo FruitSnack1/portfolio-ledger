@@ -1,7 +1,8 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { assetColorSchema } from '../asset/assetColorPalette.js'
+import { requireUserId } from '../auth/requireUserId.js'
 import type { Db } from '../db/client.js'
 import { assets } from '../db/schema.js'
 
@@ -23,16 +24,6 @@ const patchAssetBodySchema = z
     message: 'At least one of name or color is required',
   })
 
-async function userIdOr401(request: FastifyRequest, reply: FastifyReply): Promise<string | null> {
-  try {
-    await request.jwtVerify({ onlyCookie: true })
-  } catch {
-    void reply.status(401).send({ error: 'Unauthorized' })
-    return null
-  }
-  return request.user.sub
-}
-
 const assetReturnColumns = {
   id: assets.id,
   name: assets.name,
@@ -49,7 +40,7 @@ function isMissingAssetsTable(error: unknown): boolean {
 
 export async function registerAssetRoutes(app: FastifyInstance, db: Db) {
   app.get('/', async (request, reply) => {
-    const userId = await userIdOr401(request, reply)
+    const userId = await requireUserId(request, reply)
     if (!userId) return
 
     try {
@@ -71,7 +62,7 @@ export async function registerAssetRoutes(app: FastifyInstance, db: Db) {
   })
 
   app.post('/', async (request, reply) => {
-    const userId = await userIdOr401(request, reply)
+    const userId = await requireUserId(request, reply)
     if (!userId) return
 
     const parsed = createAssetBodySchema.safeParse(request.body)
@@ -101,7 +92,7 @@ export async function registerAssetRoutes(app: FastifyInstance, db: Db) {
   })
 
   app.patch('/:id', async (request, reply) => {
-    const userId = await userIdOr401(request, reply)
+    const userId = await requireUserId(request, reply)
     if (!userId) return
 
     const paramsParsed = assetIdParamsSchema.safeParse(request.params)
@@ -146,7 +137,7 @@ export async function registerAssetRoutes(app: FastifyInstance, db: Db) {
   })
 
   app.delete('/:id', async (request, reply) => {
-    const userId = await userIdOr401(request, reply)
+    const userId = await requireUserId(request, reply)
     if (!userId) return
 
     const paramsParsed = assetIdParamsSchema.safeParse(request.params)

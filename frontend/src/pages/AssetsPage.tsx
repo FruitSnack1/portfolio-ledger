@@ -222,6 +222,9 @@ export function AssetsPage() {
                         <span className="muted asset-date">{formatAssetDate(a.createdAt)}</span>
                       </div>
                       <div className="asset-actions">
+                        <Link className="btn" to={`/assets/${a.id}/logs`}>
+                          Logs
+                        </Link>
                         <button
                           type="button"
                           className="btn"
