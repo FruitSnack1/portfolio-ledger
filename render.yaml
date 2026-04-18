@@ -1,0 +1,13 @@
+# Blueprint: https://render.com/docs/blueprint-spec
+# After first deploy, set DATABASE_URL and JWT_SECRET in the Render dashboard (Environment).
+
+services:
+  - type: web
+    name: portfolio-ledger-api
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health

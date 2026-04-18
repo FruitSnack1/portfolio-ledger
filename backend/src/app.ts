@@ -12,7 +12,7 @@ import { registerDashboardRoutes } from './routes/dashboard.js'
 import { registerSettingsRoutes } from './routes/settings.js'
 
 export async function buildApp(env: Env, db: Db) {
-  const app = Fastify({ logger: true })
+  const app = Fastify({ logger: true, trustProxy: true })
 
   await app.register(cookie)
   await app.register(jwt, {
