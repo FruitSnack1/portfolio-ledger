@@ -41,31 +41,42 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-function setAuthCookie(reply: FastifyReply, token: string, secure: boolean) {
-  reply.setCookie(authCookieName, token, {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax',
-    secure,
-    maxAge: 60 * 60 * 24 * 7,
-  })
-}
-
-function clearAuthCookie(reply: FastifyReply, secure: boolean) {
-  reply.setCookie(authCookieName, '', {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax',
-    secure,
-    maxAge: 0,
-  })
-}
-
 function isSecureRequest(request: FastifyRequest) {
   return request.protocol === 'https'
 }
 
-function createRegisterHandler(db: Db) {
+export type AuthRouteCookieOptions = { cookieSameSite: 'lax' | 'none' }
+
+function createTokenCookieSetters(sameSite: 'lax' | 'none') {
+  const secureFor = (request: FastifyRequest) => (sameSite === 'none' ? true : isSecureRequest(request))
+
+  function setTokenCookie(reply: FastifyReply, token: string, request: FastifyRequest) {
+    reply.setCookie(authCookieName, token, {
+      path: '/',
+      httpOnly: true,
+      sameSite,
+      secure: secureFor(request),
+      maxAge: 60 * 60 * 24 * 7,
+    })
+  }
+
+  function clearTokenCookie(reply: FastifyReply, request: FastifyRequest) {
+    reply.setCookie(authCookieName, '', {
+      path: '/',
+      httpOnly: true,
+      sameSite,
+      secure: secureFor(request),
+      maxAge: 0,
+    })
+  }
+
+  return { setTokenCookie, clearTokenCookie }
+}
+
+function createRegisterHandler(
+  db: Db,
+  setTokenCookie: (reply: FastifyReply, token: string, request: FastifyRequest) => void,
+) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const parsed = parseCredentials(request.body)
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid email or password' })
@@ -86,7 +97,7 @@ function createRegisterHandler(db: Db) {
       if (!row) throw new Error('Failed to create user')
 
       const token = await reply.jwtSign({ sub: row.id, email: row.email })
-      setAuthCookie(reply, token, isSecureRequest(request))
+      setTokenCookie(reply, token, request)
       return reply.status(201).send({ user: row })
     } catch (error: unknown) {
       if (isUniqueViolation(error)) return reply.status(409).send({ error: 'Email already registered' })
@@ -95,7 +106,10 @@ function createRegisterHandler(db: Db) {
   }
 }
 
-function createLoginHandler(db: Db) {
+function createLoginHandler(
+  db: Db,
+  setTokenCookie: (reply: FastifyReply, token: string, request: FastifyRequest) => void,
+) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const parsed = parseCredentials(request.body)
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid email or password' })
@@ -118,16 +132,16 @@ function createLoginHandler(db: Db) {
       return reply.status(401).send({ error: 'Invalid email or password' })
 
     const token = await reply.jwtSign({ sub: row.id, email: row.email })
-    setAuthCookie(reply, token, isSecureRequest(request))
+    setTokenCookie(reply, token, request)
     return {
       user: { id: row.id, email: row.email, displayCurrency: row.displayCurrency },
     }
   }
 }
 
-function createLogoutHandler() {
+function createLogoutHandler(clearTokenCookie: (reply: FastifyReply, request: FastifyRequest) => void) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    clearAuthCookie(reply, isSecureRequest(request))
+    clearTokenCookie(reply, request)
     return { ok: true }
   }
 }
@@ -206,10 +220,12 @@ function createChangePasswordHandler(db: Db) {
   }
 }
 
-export async function registerAuthRoutes(app: FastifyInstance, db: Db) {
-  app.post('/register', createRegisterHandler(db))
-  app.post('/login', createLoginHandler(db))
-  app.post('/logout', createLogoutHandler())
+export async function registerAuthRoutes(app: FastifyInstance, db: Db, cookieOpts: AuthRouteCookieOptions) {
+  const { setTokenCookie, clearTokenCookie } = createTokenCookieSetters(cookieOpts.cookieSameSite)
+
+  app.post('/register', createRegisterHandler(db, setTokenCookie))
+  app.post('/login', createLoginHandler(db, setTokenCookie))
+  app.post('/logout', createLogoutHandler(clearTokenCookie))
   app.get('/me', createMeHandler(db))
   app.patch('/me', createPatchMeHandler(db))
   app.post('/change-password', createChangePasswordHandler(db))

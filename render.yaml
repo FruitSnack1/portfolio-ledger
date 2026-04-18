@@ -1,5 +1,9 @@
 # Blueprint: https://render.com/docs/blueprint-spec
-# After first deploy, set DATABASE_URL and JWT_SECRET in the Render dashboard (Environment).
+# After first deploy, set in the Render dashboard (Environment):
+#   DATABASE_URL, JWT_SECRET
+# If the UI is on another host (e.g. Vercel), also set:
+#   CORS_ORIGINS=https://your-app.vercel.app
+#   AUTH_COOKIE_SAME_SITE=none
 
 services:
   - type: web

@@ -22,15 +22,19 @@ export async function buildApp(env: Env, db: Db) {
   })
 
   const devOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173', 'http://127.0.0.1:4173']
+  const extraOrigins =
+    env.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter((s) => s.length > 0) ?? []
   await app.register(cors, {
-    origin: devOrigins,
+    origin: [...devOrigins, ...extraOrigins],
     credentials: true,
   })
 
   app.get('/api/health', async () => ({ ok: true }))
 
   await app.register(async (instance) => {
-    await registerAuthRoutes(instance, db)
+    await registerAuthRoutes(instance, db, {
+      cookieSameSite: env.AUTH_COOKIE_SAME_SITE,
+    })
   }, { prefix: '/api/auth' })
 
   await app.register(async (instance) => {
